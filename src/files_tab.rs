@@ -1,4 +1,4 @@
-use crate::git::{GitRepo, StatusEntry, StatusType};
+use crate::git::GitRepo;
 use crate::theme::Theme;
 use ratatui::{
     layout::Rect,
@@ -9,7 +9,7 @@ use ratatui::{
 use std::cmp;
 
 pub struct FilesTab {
-    pub files: Vec<StatusEntry>,
+    pub files: Vec<String>,
     pub selected: usize,
     pub scroll: usize,
 }
@@ -24,13 +24,11 @@ impl FilesTab {
     }
 
     pub fn refresh(&mut self, repo: &GitRepo) {
-        let mut files = Vec::new();
-        if let Ok((staged, unstaged)) = repo.get_status() {
-            files.extend(staged);
-            files.extend(unstaged);
+        if let Ok(files) = repo.get_tree_files() {
+            self.files = files;
+        } else {
+            self.files.clear();
         }
-
-        self.files = files;
         self.selected = 0;
         self.scroll = 0;
     }
@@ -45,7 +43,7 @@ impl FilesTab {
     }
 
     pub fn current_file(&self) -> Option<String> {
-        self.files.get(self.selected).map(|f| f.path.clone())
+        self.files.get(self.selected).cloned()
     }
 
     pub fn render(&self, f: &mut Frame, area: Rect, theme: &Theme) {
@@ -61,30 +59,14 @@ impl FilesTab {
         for (i, file) in self.files.iter().enumerate() {
             let is_selected = i == self.selected;
             let marker = if is_selected { ">" } else { " " };
-            let status_char = match file.status {
-                StatusType::Added => "A",
-                StatusType::Modified => "M",
-                StatusType::Deleted => "D",
-                StatusType::Renamed => "R",
-                StatusType::Copied => "C",
-                StatusType::Untracked => "?",
-                StatusType::TypeChange => "T",
-            };
-
             let style = if is_selected {
                 theme.selected
-            } else if file.staged {
-                theme.file_entry_staged
             } else {
-                match file.status {
-                    StatusType::Untracked => theme.file_entry_untracked,
-                    StatusType::Modified => theme.file_entry_modified,
-                    _ => theme.file_entry,
-                }
+                theme.file_entry
             };
 
             lines.push(Line::from(Span::styled(
-                format!(" {} {} {}", marker, status_char, file.path),
+                format!(" {} {}", marker, file),
                 style,
             )));
         }
