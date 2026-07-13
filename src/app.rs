@@ -255,7 +255,7 @@ impl App {
                 },
             )
         } else {
-            " q:quit | h:help | d:show diff | \u{2191}\u{2193}:navigate | Tab:next | 1-5:goto tab ".to_string()
+            " q:quit | h:help | d:show diff | \u{2191}\u{2193}:navigate | Tab:next | 1-4:goto tab ".to_string()
         };
 
         let status_line = Line::from(Span::styled(mode_text, self.theme.dim_text));
