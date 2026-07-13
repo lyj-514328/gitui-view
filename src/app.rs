@@ -186,7 +186,7 @@ impl App {
             " Status [1] ",
             " Log [2] ",
             " Files [3] ",
-            " Stashes [5] ",
+            " Stashes [4] ",
         ];
 
         let tab_index = match self.current_tab {
@@ -222,7 +222,7 @@ impl App {
             .constraints([
                 Constraint::Length(3),
                 Constraint::Min(1),
-                Constraint::Length(1),
+                Constraint::Length(3),
             ])
             .split(area);
 

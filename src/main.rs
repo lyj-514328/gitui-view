@@ -85,7 +85,7 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
                     app.show_diff = false;
                     app.refresh_current_tab();
                 }
-                KeyCode::Char('5') => {
+                KeyCode::Char('4') => {
                     app.current_tab = app::Tab::Stashes;
                     app.show_diff = false;
                     app.refresh_current_tab();
