@@ -111,7 +111,13 @@ impl App {
         } else {
             match self.current_tab {
                 Tab::Status => self.status_tab.move_down(),
-                Tab::Log => self.log_tab.move_down(),
+                Tab::Log => {
+                    if self.log_tab.show_files {
+                        self.log_tab.file_move_down();
+                    } else {
+                        self.log_tab.move_down();
+                    }
+                }
                 Tab::Files => self.files_tab.move_down(),
                 Tab::Stashes => self.stashes_tab.move_down(),
             }
@@ -124,7 +130,13 @@ impl App {
         } else {
             match self.current_tab {
                 Tab::Status => self.status_tab.move_up(),
-                Tab::Log => self.log_tab.move_up(),
+                Tab::Log => {
+                    if self.log_tab.show_files {
+                        self.log_tab.file_move_up();
+                    } else {
+                        self.log_tab.move_up();
+                    }
+                }
                 Tab::Files => self.files_tab.move_up(),
                 Tab::Stashes => self.stashes_tab.move_up(),
             }
@@ -144,11 +156,22 @@ impl App {
                 self.diff_view.clear();
             }
             Tab::Log => {
-                if let Some(commit_id) = self.log_tab.current_commit_id() {
-                    if let Ok(diffs) = self.repo.get_commit_diff(&commit_id) {
-                        if let Some(diff) = diffs.into_iter().next() {
-                            self.diff_view.set_diff(diff);
-                            return;
+                if self.log_tab.show_files {
+                    if let Some(path) = self.log_tab.current_file_path() {
+                        if let Some(commit_id) = self.log_tab.current_commit_id() {
+                            if let Ok(diffs) = self.repo.get_commit_diff(&commit_id) {
+                                for diff in diffs {
+                                    let diff_path = if !diff.new_path.is_empty() {
+                                        diff.new_path.clone()
+                                    } else {
+                                        diff.old_path.clone()
+                                    };
+                                    if diff_path == path {
+                                        self.diff_view.set_diff(diff);
+                                        return;
+                                    }
+                                }
+                            }
                         }
                     }
                 }

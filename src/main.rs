@@ -118,10 +118,16 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
                         app.toggle_help();
                     } else if app.show_diff {
                         app.toggle_diff();
+                    } else if matches!(app.current_tab, app::Tab::Log) && app.log_tab.show_files {
+                        app.log_tab.close_files();
                     }
                 }
                 KeyCode::Enter => {
-                    app.toggle_diff();
+                    if matches!(app.current_tab, app::Tab::Log) && !app.log_tab.show_files {
+                        app.log_tab.toggle_files(&app.repo);
+                    } else {
+                        app.toggle_diff();
+                    }
                 }
                 _ => {
                     if app.show_help {
