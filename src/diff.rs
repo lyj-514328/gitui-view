@@ -1,3 +1,4 @@
+use crate::diff_engine::DiffEngine;
 use crate::git::{DiffLine, DiffLineType, FileDiff, Hunk};
 use crate::theme::Theme;
 use ratatui::{
@@ -8,6 +9,7 @@ use ratatui::{
     Frame,
 };
 use std::cmp;
+use std::path::Path;
 use unicode_width::UnicodeWidthStr;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -108,6 +110,11 @@ impl DiffView {
     fn render_inline(&self, f: &mut Frame, area: Rect, theme: &Theme) {
         let Some(file_diff) = &self.file_diff else { return };
 
+        let extension = Path::new(&file_diff.new_path)
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("");
+
         let mut lines: Vec<Line> = Vec::new();
         let mut line_idx = 0;
 
@@ -120,31 +127,166 @@ impl DiffView {
                 lines.push(header_line);
             }
 
-            for diff_line in &hunk.lines {
-                let is_selected = line_idx == self.selected_line;
-                let style = self.line_style(diff_line, is_selected, theme);
-                let prefix = match diff_line.line_type {
-                    DiffLineType::Add => "+",
-                    DiffLineType::Delete => "-",
-                    DiffLineType::Header => " ",
-                    DiffLineType::Context => " ",
-                };
+            let mut minus_buffer: Vec<&DiffLine> = Vec::new();
+            let mut plus_buffer: Vec<&DiffLine> = Vec::new();
 
-                let line_no = match diff_line.line_type {
-                    DiffLineType::Add => format!("{:>4} ", diff_line.new_lineno.unwrap_or(0)),
-                    DiffLineType::Delete => {
-                        format!("{:>4} ", diff_line.old_lineno.unwrap_or(0))
+            let flush_buffer = |lines: &mut Vec<Line>,
+                                line_idx: &mut usize,
+                                minus_buffer: &mut Vec<&DiffLine>,
+                                plus_buffer: &mut Vec<&DiffLine>,
+                                extension: &str,
+                                theme: &Theme,
+                                selected_line: usize| {
+                let pair_count = cmp::max(minus_buffer.len(), plus_buffer.len());
+                for i in 0..pair_count {
+                    let is_minus_selected = *line_idx == selected_line;
+                    let is_plus_selected = *line_idx == selected_line;
+
+                    if i < minus_buffer.len() && i < plus_buffer.len() {
+                        let minus_line = &minus_buffer[i];
+                        let plus_line = &plus_buffer[i];
+                        let (minus_spans, plus_spans) = DiffEngine::highlight_line_pair(
+                            &minus_line.content,
+                            &plus_line.content,
+                            extension,
+                            theme,
+                        );
+
+                        let mut prefix = String::from("-");
+                        let line_no = format!("{:>4} ", minus_line.old_lineno.unwrap_or(0));
+                        let mut all_spans = vec![
+                            Span::styled(
+                                format!("{}{}", prefix, line_no),
+                                if is_minus_selected {
+                                    theme.diff_delete_highlight
+                                } else {
+                                    theme.diff_delete
+                                },
+                            ),
+                        ];
+                        all_spans.extend(minus_spans);
+                        lines.push(Line::from(all_spans));
+                        *line_idx += 1;
+
+                        prefix = String::from("+");
+                        let line_no = format!("{:>4} ", plus_line.new_lineno.unwrap_or(0));
+                        let mut all_spans = vec![
+                            Span::styled(
+                                format!("{}{}", prefix, line_no),
+                                if is_plus_selected {
+                                    theme.diff_add_highlight
+                                } else {
+                                    theme.diff_add
+                                },
+                            ),
+                        ];
+                        all_spans.extend(plus_spans);
+                        lines.push(Line::from(all_spans));
+                        *line_idx += 1;
+                    } else if i < minus_buffer.len() {
+                        let line = minus_buffer[i];
+                        let is_selected = *line_idx == selected_line;
+                        let style = if is_selected {
+                            theme.diff_delete_highlight
+                        } else {
+                            theme.diff_delete
+                        };
+                        let prefix = "-";
+                        let line_no = format!("{:>4} ", line.old_lineno.unwrap_or(0));
+                        let content_spans = DiffEngine::highlight_line(
+                            &line.content,
+                            DiffLineType::Delete,
+                            extension,
+                            theme,
+                        );
+                        let mut all_spans = vec![
+                            Span::styled(format!("{}{}", prefix, line_no), style),
+                        ];
+                        all_spans.extend(content_spans);
+                        lines.push(Line::from(all_spans));
+                        *line_idx += 1;
+                    } else {
+                        let line = plus_buffer[i];
+                        let is_selected = *line_idx == selected_line;
+                        let style = if is_selected {
+                            theme.diff_add_highlight
+                        } else {
+                            theme.diff_add
+                        };
+                        let prefix = "+";
+                        let line_no = format!("{:>4} ", line.new_lineno.unwrap_or(0));
+                        let content_spans = DiffEngine::highlight_line(
+                            &line.content,
+                            DiffLineType::Add,
+                            extension,
+                            theme,
+                        );
+                        let mut all_spans = vec![
+                            Span::styled(format!("{}{}", prefix, line_no), style),
+                        ];
+                        all_spans.extend(content_spans);
+                        lines.push(Line::from(all_spans));
+                        *line_idx += 1;
                     }
-                    _ => format!(
-                        "{:>4} ",
-                        diff_line.old_lineno.unwrap_or(diff_line.new_lineno.unwrap_or(0))
-                    ),
-                };
+                }
+                minus_buffer.clear();
+                plus_buffer.clear();
+            };
 
-                let content = format!("{}{}{}", prefix, line_no, diff_line.content);
-                lines.push(Line::from(Span::styled(content, style)));
-                line_idx += 1;
+            for diff_line in &hunk.lines {
+                match diff_line.line_type {
+                    DiffLineType::Context | DiffLineType::Header => {
+                        flush_buffer(
+                            &mut lines,
+                            &mut line_idx,
+                            &mut minus_buffer,
+                            &mut plus_buffer,
+                            extension,
+                            theme,
+                            self.selected_line,
+                        );
+
+                        let is_selected = line_idx == self.selected_line;
+                        let style = if is_selected {
+                            theme.selected
+                        } else {
+                            theme.diff_context
+                        };
+                        let prefix = " ";
+                        let line_no = match diff_line.line_type {
+                            DiffLineType::Header => "    ".to_string(),
+                            _ => format!(
+                                "{:>4} ",
+                                diff_line.old_lineno.unwrap_or(diff_line.new_lineno.unwrap_or(0))
+                            ),
+                        };
+                        let content_spans = DiffEngine::highlight_line(
+                            &diff_line.content,
+                            diff_line.line_type.clone(),
+                            extension,
+                            theme,
+                        );
+                        let mut all_spans = vec![
+                            Span::styled(format!("{}{}", prefix, line_no), style),
+                        ];
+                        all_spans.extend(content_spans);
+                        lines.push(Line::from(all_spans));
+                        line_idx += 1;
+                    }
+                    DiffLineType::Delete => minus_buffer.push(diff_line),
+                    DiffLineType::Add => plus_buffer.push(diff_line),
+                }
             }
+
+            flush_buffer(
+                &mut lines,
+                &mut line_idx,
+                &mut minus_buffer,
+                &mut plus_buffer,
+                extension,
+                theme,
+                self.selected_line,
+            );
         }
 
         let visible_lines: Vec<Line> = lines

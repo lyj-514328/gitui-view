@@ -1,5 +1,8 @@
+mod align;
 mod app;
 mod diff;
+mod diff_engine;
+mod edits;
 mod git;
 mod log_tab;
 mod stashes_tab;
