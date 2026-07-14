@@ -20,6 +20,7 @@ pub enum Tab {
 
 pub struct App {
     pub repo: GitRepo,
+    pub repo_path_text: String,
     pub current_tab: Tab,
     pub status_tab: StatusTab,
     pub log_tab: LogTab,
@@ -34,8 +35,12 @@ pub struct App {
 impl App {
     pub fn new(repo_path: &Path, theme: Theme) -> anyhow::Result<Self> {
         let repo = GitRepo::open(repo_path)?;
+        let repo_path_text = repo.workdir()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| repo_path.to_string_lossy().to_string());
         let mut app = Self {
             repo,
+            repo_path_text,
             current_tab: Tab::Status,
             status_tab: StatusTab::new(),
             log_tab: LogTab::new(),
@@ -219,6 +224,20 @@ impl App {
             Tab::Stashes => 2,
         };
 
+        let main_layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(1),
+                Constraint::Min(1),
+                Constraint::Length(3),
+            ])
+            .split(area);
+
+        let top_bar = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Min(1), Constraint::Length(40)])
+            .split(main_layout[0]);
+
         let tabs = Tabs::new(
             tab_titles
                 .iter()
@@ -235,21 +254,23 @@ impl App {
         )
         .block(
             Block::default()
-                .borders(Borders::ALL)
+                .borders(Borders::BOTTOM)
                 .border_style(self.theme.tab_bar_style()),
         )
         .select(tab_index);
 
-        let main_layout = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(3),
-                Constraint::Min(1),
-                Constraint::Length(3),
-            ])
-            .split(area);
+        f.render_widget(tabs, top_bar[0]);
 
-        f.render_widget(tabs, main_layout[0]);
+        let path_text = if self.repo_path_text.len() > 36 {
+            format!("…{}", &self.repo_path_text[self.repo_path_text.len().saturating_sub(35)..])
+        } else {
+            self.repo_path_text.clone()
+        };
+        f.render_widget(
+            Paragraph::new(Line::from(Span::styled(path_text, self.theme.dim_text())))
+                .alignment(ratatui::layout::Alignment::Right),
+            top_bar[1],
+        );
 
         let content_area = main_layout[1];
 

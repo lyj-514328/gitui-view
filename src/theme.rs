@@ -319,6 +319,9 @@ impl Theme {
     pub fn selected(&self) -> Style {
         Style::default().fg(self.selection_fg).bg(self.selection_bg)
     }
+    pub fn selected_on(&self, style: Style) -> Style {
+        style.bg(self.selection_bg).fg(self.selection_fg)
+    }
 
     // --- UI chrome ---
     pub fn border_style(&self) -> Style {
