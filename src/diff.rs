@@ -119,6 +119,7 @@ impl DiffView {
         let mut line_idx = 0;
 
         for hunk in &file_diff.hunks {
+            lines.push(Line::from(Span::styled(String::new(), Style::default())));
             let header_text = hunk.header.trim();
             lines.push(Line::from(Span::styled(header_text.to_string(), theme.diff_header())));
 
@@ -195,6 +196,8 @@ impl DiffView {
         let mut right_lines: Vec<Line<'static>> = Vec::new();
 
         for hunk in &file_diff.hunks {
+            left_lines.push(Line::from(Span::styled(String::new(), theme.dim_text())));
+            right_lines.push(Line::from(Span::styled(String::new(), theme.dim_text())));
             let header_text = hunk.header.trim().to_string();
             left_lines.push(Line::from(Span::styled(header_text.clone(), theme.diff_header())));
             let underline = "─".repeat(left_area.width.saturating_sub(1) as usize);
