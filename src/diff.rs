@@ -196,13 +196,9 @@ impl DiffView {
 
         for hunk in &file_diff.hunks {
             let header_text = hunk.header.trim().to_string();
-            let top = format!("{}┐", "─".repeat(left_area.width.saturating_sub(1) as usize));
-            left_lines.push(Line::from(Span::styled(top, theme.diff_header())));
-            let middle = format!(" {} │", header_text);
-            left_lines.push(Line::from(Span::styled(middle, theme.diff_header())));
-            let bottom = format!("{}┘", "─".repeat(left_area.width.saturating_sub(1) as usize));
-            left_lines.push(Line::from(Span::styled(bottom, theme.diff_header())));
-            right_lines.push(Line::from(Span::styled(String::new(), theme.dim_text())));
+            left_lines.push(Line::from(Span::styled(header_text.clone(), theme.diff_header())));
+            let underline = "─".repeat(left_area.width.saturating_sub(1) as usize);
+            left_lines.push(Line::from(Span::styled(underline, theme.diff_header())));
             right_lines.push(Line::from(Span::styled(String::new(), theme.dim_text())));
             right_lines.push(Line::from(Span::styled(String::new(), theme.dim_text())));
 
