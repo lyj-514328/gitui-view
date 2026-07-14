@@ -133,75 +133,75 @@ fn parse_ron_color_value(s: &str) -> Option<Color> {
 impl Theme {
     pub fn dark() -> Self {
         Self {
-            tab_active: Color::Rgb(200, 200, 200),
-            tab_inactive: Color::Rgb(140, 140, 140),
-            tab_bar_bg: Color::Rgb(30, 30, 30),
-            diff_add_fg: Color::Rgb(160, 220, 160),
-            diff_add_bg: Color::Rgb(30, 55, 30),
-            diff_delete_fg: Color::Rgb(220, 160, 160),
-            diff_delete_bg: Color::Rgb(55, 30, 30),
-            diff_context_bg: Color::Rgb(40, 40, 40),
-            diff_header_fg: Color::Rgb(100, 160, 220),
-            selection_bg: Color::Rgb(70, 70, 100),
-            selection_fg: Color::Rgb(220, 220, 255),
-            border: Color::Rgb(100, 100, 120),
-            border_focused: Color::Rgb(150, 180, 255),
-            title_fg: Color::Rgb(180, 200, 255),
-            dim_text: Color::Rgb(120, 120, 120),
-            normal_bg: Color::Rgb(30, 30, 30),
-            light_bg: Color::Rgb(40, 40, 40),
-            file_entry: Color::Rgb(200, 200, 200),
-            file_entry_staged: Color::Rgb(160, 220, 160),
-            file_entry_modified: Color::Rgb(220, 200, 160),
-            file_entry_untracked: Color::Rgb(160, 160, 160),
-            commit_hash: Color::Rgb(200, 180, 120),
-            commit_msg: Color::Rgb(200, 200, 200),
-            commit_author: Color::Rgb(160, 180, 220),
-            commit_date: Color::Rgb(140, 140, 140),
-            stash_msg: Color::Rgb(200, 180, 220),
-            help_key: Color::Rgb(180, 200, 255),
-            help_desc: Color::Rgb(160, 160, 160),
-            mode_indicator_bg: Color::Rgb(40, 60, 40),
-            status_added: Color::Rgb(100, 200, 100),
-            status_deleted: Color::Rgb(200, 100, 100),
-            status_modified: Color::Rgb(200, 180, 100),
+            tab_active: Color::White,
+            tab_inactive: Color::DarkGray,
+            tab_bar_bg: Color::Reset,
+            diff_add_fg: Color::Green,
+            diff_add_bg: Color::Reset,
+            diff_delete_fg: Color::Red,
+            diff_delete_bg: Color::Reset,
+            diff_context_bg: Color::Reset,
+            diff_header_fg: Color::Blue,
+            selection_bg: Color::Blue,
+            selection_fg: Color::White,
+            border: Color::DarkGray,
+            border_focused: Color::Reset,
+            title_fg: Color::White,
+            dim_text: Color::DarkGray,
+            normal_bg: Color::Reset,
+            light_bg: Color::Reset,
+            file_entry: Color::White,
+            file_entry_staged: Color::LightGreen,
+            file_entry_modified: Color::Yellow,
+            file_entry_untracked: Color::DarkGray,
+            commit_hash: Color::Magenta,
+            commit_msg: Color::White,
+            commit_author: Color::Green,
+            commit_date: Color::LightCyan,
+            stash_msg: Color::LightMagenta,
+            help_key: Color::White,
+            help_desc: Color::DarkGray,
+            mode_indicator_bg: Color::Reset,
+            status_added: Color::LightGreen,
+            status_deleted: Color::LightRed,
+            status_modified: Color::Yellow,
         }
     }
 
     pub fn light() -> Self {
         Self {
-            tab_active: Color::Rgb(30, 30, 30),
-            tab_inactive: Color::Rgb(140, 140, 140),
-            tab_bar_bg: Color::Rgb(230, 230, 230),
-            diff_add_fg: Color::Rgb(30, 120, 30),
-            diff_add_bg: Color::Rgb(220, 245, 220),
-            diff_delete_fg: Color::Rgb(180, 40, 40),
-            diff_delete_bg: Color::Rgb(255, 225, 225),
-            diff_context_bg: Color::Rgb(245, 245, 245),
-            diff_header_fg: Color::Rgb(30, 100, 200),
-            selection_bg: Color::Rgb(200, 215, 255),
-            selection_fg: Color::Rgb(20, 20, 40),
-            border: Color::Rgb(180, 180, 190),
-            border_focused: Color::Rgb(80, 130, 220),
-            title_fg: Color::Rgb(40, 80, 160),
-            dim_text: Color::Rgb(150, 150, 150),
-            normal_bg: Color::Rgb(255, 255, 255),
-            light_bg: Color::Rgb(245, 245, 245),
-            file_entry: Color::Rgb(50, 50, 50),
-            file_entry_staged: Color::Rgb(30, 140, 30),
-            file_entry_modified: Color::Rgb(180, 140, 30),
-            file_entry_untracked: Color::Rgb(150, 150, 150),
-            commit_hash: Color::Rgb(180, 140, 40),
-            commit_msg: Color::Rgb(50, 50, 50),
-            commit_author: Color::Rgb(60, 100, 180),
-            commit_date: Color::Rgb(140, 140, 140),
-            stash_msg: Color::Rgb(140, 80, 180),
-            help_key: Color::Rgb(40, 80, 200),
-            help_desc: Color::Rgb(120, 120, 120),
-            mode_indicator_bg: Color::Rgb(220, 240, 220),
-            status_added: Color::Rgb(30, 160, 30),
-            status_deleted: Color::Rgb(200, 40, 40),
-            status_modified: Color::Rgb(200, 160, 30),
+            tab_active: Color::Black,
+            tab_inactive: Color::DarkGray,
+            tab_bar_bg: Color::Reset,
+            diff_add_fg: Color::Green,
+            diff_add_bg: Color::Reset,
+            diff_delete_fg: Color::Red,
+            diff_delete_bg: Color::Reset,
+            diff_context_bg: Color::Reset,
+            diff_header_fg: Color::Blue,
+            selection_bg: Color::Blue,
+            selection_fg: Color::White,
+            border: Color::DarkGray,
+            border_focused: Color::Reset,
+            title_fg: Color::Black,
+            dim_text: Color::DarkGray,
+            normal_bg: Color::Reset,
+            light_bg: Color::Reset,
+            file_entry: Color::Black,
+            file_entry_staged: Color::Green,
+            file_entry_modified: Color::Yellow,
+            file_entry_untracked: Color::DarkGray,
+            commit_hash: Color::Magenta,
+            commit_msg: Color::Black,
+            commit_author: Color::Green,
+            commit_date: Color::LightCyan,
+            stash_msg: Color::LightMagenta,
+            help_key: Color::Blue,
+            help_desc: Color::DarkGray,
+            mode_indicator_bg: Color::Reset,
+            status_added: Color::Green,
+            status_deleted: Color::Red,
+            status_modified: Color::Yellow,
         }
     }
 
@@ -275,35 +275,34 @@ impl Theme {
     pub fn tab_active_style(&self) -> Style {
         Style::default()
             .fg(self.tab_active)
-            .bg(self.tab_bar_bg)
             .add_modifier(Modifier::BOLD)
     }
     pub fn tab_inactive_style(&self) -> Style {
-        Style::default().fg(self.tab_inactive).bg(self.tab_bar_bg)
+        Style::default().fg(self.tab_inactive)
     }
     pub fn tab_bar_style(&self) -> Style {
-        Style::default().bg(self.tab_bar_bg)
+        Style::default()
     }
 
     // --- Diff ---
     pub fn diff_add(&self, selected: bool) -> Style {
-        let base = Style::default().fg(self.diff_add_fg).bg(self.diff_add_bg);
+        let base = Style::default().fg(self.diff_add_fg);
         if selected {
-            base.fg(self.selection_fg).bg(self.selection_bg)
+            Style::default().fg(self.selection_fg).bg(self.selection_bg)
         } else {
             base
         }
     }
     pub fn diff_delete(&self, selected: bool) -> Style {
-        let base = Style::default().fg(self.diff_delete_fg).bg(self.diff_delete_bg);
+        let base = Style::default().fg(self.diff_delete_fg);
         if selected {
-            base.fg(self.selection_fg).bg(self.selection_bg)
+            Style::default().fg(self.selection_fg).bg(self.selection_bg)
         } else {
             base
         }
     }
     pub fn diff_context(&self, selected: bool) -> Style {
-        let base = Style::default().fg(self.normal_bg).bg(self.diff_context_bg);
+        let base = Style::default().bg(self.diff_context_bg);
         if selected {
             Style::default().fg(self.selection_fg).bg(self.selection_bg)
         } else {
@@ -313,7 +312,6 @@ impl Theme {
     pub fn diff_header(&self) -> Style {
         Style::default()
             .fg(self.diff_header_fg)
-            .bg(self.normal_bg)
             .add_modifier(Modifier::BOLD)
     }
 
@@ -324,10 +322,10 @@ impl Theme {
 
     // --- UI chrome ---
     pub fn border_style(&self) -> Style {
-        Style::default().fg(self.border).bg(self.normal_bg)
+        Style::default().fg(self.border)
     }
     pub fn border_focused_style(&self) -> Style {
-        Style::default().fg(self.border_focused).bg(self.normal_bg)
+        Style::default().fg(self.border_focused)
     }
     pub fn title(&self) -> Style {
         Style::default()
@@ -335,10 +333,10 @@ impl Theme {
             .add_modifier(Modifier::BOLD)
     }
     pub fn dim_text(&self) -> Style {
-        Style::default().fg(self.dim_text).bg(self.normal_bg)
+        Style::default().fg(self.dim_text)
     }
     pub fn normal(&self) -> Style {
-        Style::default().fg(self.normal_bg).bg(self.normal_bg)
+        Style::default()
     }
 
     // --- File entry ---
@@ -347,16 +345,14 @@ impl Theme {
             return self.selected();
         }
         if is_staged {
-            return Style::default()
-                .fg(self.file_entry_staged)
-                .bg(self.light_bg);
+            return Style::default().fg(self.file_entry_staged);
         }
         let fg = match status {
             "?" => self.file_entry_untracked,
             "M" => self.file_entry_modified,
             _ => self.file_entry,
         };
-        Style::default().fg(fg).bg(self.light_bg)
+        Style::default().fg(fg)
     }
 
     // --- Commit info ---
@@ -364,28 +360,28 @@ impl Theme {
         if selected {
             self.selected()
         } else {
-            Style::default().fg(self.commit_hash).bg(self.light_bg)
+            Style::default().fg(self.commit_hash)
         }
     }
     pub fn commit_msg(&self, selected: bool) -> Style {
         if selected {
             self.selected()
         } else {
-            Style::default().fg(self.commit_msg).bg(self.light_bg)
+            Style::default().fg(self.commit_msg)
         }
     }
     pub fn commit_author(&self, selected: bool) -> Style {
         if selected {
             self.selected()
         } else {
-            Style::default().fg(self.commit_author).bg(self.light_bg)
+            Style::default().fg(self.commit_author)
         }
     }
     pub fn commit_date(&self, selected: bool) -> Style {
         if selected {
             self.selected()
         } else {
-            Style::default().fg(self.commit_date).bg(self.light_bg)
+            Style::default().fg(self.commit_date)
         }
     }
 
@@ -394,7 +390,7 @@ impl Theme {
         if selected {
             self.selected()
         } else {
-            Style::default().fg(self.stash_msg).bg(self.light_bg)
+            Style::default().fg(self.stash_msg)
         }
     }
 
@@ -412,7 +408,6 @@ impl Theme {
     pub fn mode_indicator(&self) -> Style {
         Style::default()
             .fg(self.diff_add_fg)
-            .bg(self.mode_indicator_bg)
             .add_modifier(Modifier::BOLD)
     }
 
