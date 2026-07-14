@@ -320,6 +320,11 @@ impl DiffView {
             height: area.height,
         };
 
+        let extension = Path::new(&file_diff.new_path)
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("");
+
         let mut left_lines: Vec<Line> = Vec::new();
         let mut right_lines: Vec<Line> = Vec::new();
 
@@ -331,16 +336,12 @@ impl DiffView {
             )));
             right_lines.push(Line::from(Span::styled(header_text, theme.diff_header())));
 
-            let (paired_left, paired_right) = self.pair_lines(hunk, theme);
+            let (paired_left, paired_right) = self.pair_lines(hunk, extension, theme);
 
             let max_lines = cmp::max(paired_left.len(), paired_right.len());
             for i in 0..max_lines {
                 if i < paired_left.len() {
-                    let (content, style) = &paired_left[i];
-                    left_lines.push(Line::from(Span::styled(
-                        truncate_str(content, half_width.saturating_sub(2) as usize),
-                        *style,
-                    )));
+                    left_lines.push(truncate_line(&paired_left[i], half_width.saturating_sub(2) as usize));
                 } else {
                     left_lines.push(Line::from(Span::styled(
                         String::new(),
@@ -349,11 +350,7 @@ impl DiffView {
                 }
 
                 if i < paired_right.len() {
-                    let (content, style) = &paired_right[i];
-                    right_lines.push(Line::from(Span::styled(
-                        truncate_str(content, (area.width - half_width - 1).saturating_sub(2) as usize),
-                        *style,
-                    )));
+                    right_lines.push(truncate_line(&paired_right[i], (area.width - half_width - 1).saturating_sub(2) as usize));
                 } else {
                     right_lines.push(Line::from(Span::styled(
                         String::new(),
@@ -378,29 +375,49 @@ impl DiffView {
         f.render_widget(Paragraph::new(visible_right), right_area);
     }
 
-    fn pair_lines(&self, hunk: &Hunk, theme: &Theme) -> (Vec<(String, Style)>, Vec<(String, Style)>) {
+    fn pair_lines(&self, hunk: &Hunk, extension: &str, theme: &Theme) -> (Vec<Line<'_>>, Vec<Line<'_>>) {
         let mut left = Vec::new();
         let mut right = Vec::new();
         let mut delete_lines: Vec<&DiffLine> = Vec::new();
         let mut add_lines: Vec<&DiffLine> = Vec::new();
 
-        let flush_pending = |left: &mut Vec<(String, Style)>,
-                              right: &mut Vec<(String, Style)>,
+        let flush_pending = |left: &mut Vec<Line>,
+                              right: &mut Vec<Line>,
                               dels: &mut Vec<&DiffLine>,
-                              adds: &mut Vec<&DiffLine>| {
+                              adds: &mut Vec<&DiffLine>,
+                              extension: &str,
+                              theme: &Theme| {
             let pair_count = cmp::max(dels.len(), adds.len());
             for i in 0..pair_count {
-                if i < dels.len() {
+                if i < dels.len() && i < adds.len() {
+                    let (minus_spans, plus_spans) = DiffEngine::highlight_line_pair(
+                        &dels[i].content,
+                        &adds[i].content,
+                        extension,
+                        theme,
+                    );
+                    left.push(Line::from(minus_spans));
+                    right.push(Line::from(plus_spans));
+                } else if i < dels.len() {
                     let line = dels[i];
-                    left.push((line.content.clone(), self.line_style(line, false, theme)));
+                    let spans = DiffEngine::highlight_line(
+                        &line.content,
+                        DiffLineType::Delete,
+                        extension,
+                        theme,
+                    );
+                    left.push(Line::from(spans));
+                    right.push(Line::from(Span::styled(String::new(), Style::default())));
                 } else {
-                    left.push((String::new(), Style::default()));
-                }
-                if i < adds.len() {
                     let line = adds[i];
-                    right.push((line.content.clone(), self.line_style(line, false, theme)));
-                } else {
-                    right.push((String::new(), Style::default()));
+                    let spans = DiffEngine::highlight_line(
+                        &line.content,
+                        DiffLineType::Add,
+                        extension,
+                        theme,
+                    );
+                    left.push(Line::from(Span::styled(String::new(), Style::default())));
+                    right.push(Line::from(spans));
                 }
             }
             dels.clear();
@@ -410,49 +427,59 @@ impl DiffView {
         for line in &hunk.lines {
             match line.line_type {
                 DiffLineType::Context | DiffLineType::Header => {
-                    flush_pending(&mut left, &mut right, &mut delete_lines, &mut add_lines);
-                    let style = self.line_style(line, false, &Theme::dark());
-                    left.push((line.content.clone(), style));
-                    right.push((line.content.clone(), style));
+                    flush_pending(&mut left, &mut right, &mut delete_lines, &mut add_lines, extension, theme);
+                    let spans = DiffEngine::highlight_line(
+                        &line.content,
+                        line.line_type.clone(),
+                        extension,
+                        theme,
+                    );
+                    left.push(Line::from(spans.clone()));
+                    right.push(Line::from(spans));
                 }
                 DiffLineType::Delete => delete_lines.push(line),
                 DiffLineType::Add => add_lines.push(line),
             }
         }
 
-        flush_pending(&mut left, &mut right, &mut delete_lines, &mut add_lines);
+        flush_pending(&mut left, &mut right, &mut delete_lines, &mut add_lines, extension, theme);
 
         (left, right)
     }
-
-    fn line_style(&self, line: &DiffLine, selected: bool, theme: &Theme) -> Style {
-        match line.line_type {
-            DiffLineType::Add => theme.diff_add(selected),
-            DiffLineType::Delete => theme.diff_delete(selected),
-            DiffLineType::Header => theme.diff_header(),
-            DiffLineType::Context => theme.diff_context(selected),
-        }
-    }
 }
 
-fn truncate_str(s: &str, max_width: usize) -> String {
+fn truncate_line(line: &Line, max_width: usize) -> Line<'static> {
     if max_width == 0 {
-        return String::new();
+        return Line::from(Span::styled(String::new(), Style::default()));
     }
-    let width = UnicodeWidthStr::width(s);
-    if width <= max_width {
-        return s.to_string();
-    }
-    let mut result = String::new();
+    let mut result_spans = Vec::new();
     let mut current_width = 0;
-    for c in s.chars() {
-        let cw = UnicodeWidthStr::width(c.to_string().as_str());
-        if current_width + cw > max_width.saturating_sub(1) {
-            result.push('\u{2026}');
+    for span in &line.spans {
+        let s = span.content.as_ref();
+        let width = UnicodeWidthStr::width(s);
+        if current_width + width <= max_width {
+            result_spans.push(Span::styled(s.to_string(), span.style));
+            current_width += width;
+        } else {
+            let remaining = max_width.saturating_sub(current_width);
+            if remaining == 0 {
+                result_spans.push(Span::styled("\u{2026}".to_string(), span.style));
+            } else {
+                let mut truncated = String::new();
+                let mut w = 0;
+                for c in s.chars() {
+                    let cw = UnicodeWidthStr::width(c.to_string().as_str());
+                    if w + cw > remaining {
+                        truncated.push('\u{2026}');
+                        break;
+                    }
+                    truncated.push(c);
+                    w += cw;
+                }
+                result_spans.push(Span::styled(truncated, span.style));
+            }
             break;
         }
-        result.push(c);
-        current_width += cw;
     }
-    result
+    Line::from(result_spans)
 }
