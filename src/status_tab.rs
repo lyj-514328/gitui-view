@@ -14,7 +14,6 @@ pub struct StatusTab {
     pub unstaged: Vec<StatusEntry>,
     pub selected: usize,
     pub scroll: usize,
-    pub focus_staged: bool,
 }
 
 impl StatusTab {
@@ -24,7 +23,6 @@ impl StatusTab {
             unstaged: Vec::new(),
             selected: 0,
             scroll: 0,
-            focus_staged: true,
         }
     }
 

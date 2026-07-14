@@ -114,6 +114,10 @@ impl DiffView {
             .extension()
             .and_then(|e| e.to_str())
             .unwrap_or("");
+        let file_name = Path::new(&file_diff.new_path)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("");
 
         let mut lines: Vec<Line<'static>> = Vec::new();
         let mut line_idx = 0;
@@ -129,7 +133,7 @@ impl DiffView {
             for diff_line in &hunk.lines {
                 match diff_line.line_type {
                     DiffLineType::Context | DiffLineType::Header => {
-                        flush_buffer_inline(&mut lines, &mut line_idx, &mut minus_buffer, &mut plus_buffer, extension, theme, self.selected_line, area.width);
+                        flush_buffer_inline(&mut lines, &mut line_idx, &mut minus_buffer, &mut plus_buffer, file_name, extension, theme, self.selected_line, area.width);
 
                         let is_selected = line_idx == self.selected_line;
                         let style = if is_selected {
@@ -140,6 +144,7 @@ impl DiffView {
                         let content_spans = DiffEngine::highlight_line(
                             &diff_line.content,
                             diff_line.line_type.clone(),
+                            file_name,
                             extension,
                             theme,
                         );
@@ -153,7 +158,7 @@ impl DiffView {
                 }
             }
 
-            flush_buffer_inline(&mut lines, &mut line_idx, &mut minus_buffer, &mut plus_buffer, extension, theme, self.selected_line, area.width);
+            flush_buffer_inline(&mut lines, &mut line_idx, &mut minus_buffer, &mut plus_buffer, file_name, extension, theme, self.selected_line, area.width);
         }
 
         let visible_lines: Vec<Line> = lines
@@ -191,6 +196,10 @@ impl DiffView {
             .extension()
             .and_then(|e| e.to_str())
             .unwrap_or("");
+        let file_name = Path::new(&file_diff.new_path)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("");
 
         let mut left_lines: Vec<Line<'static>> = Vec::new();
         let mut right_lines: Vec<Line<'static>> = Vec::new();
@@ -205,7 +214,7 @@ impl DiffView {
             right_lines.push(Line::from(Span::styled(String::new(), theme.dim_text())));
             right_lines.push(Line::from(Span::styled(String::new(), theme.dim_text())));
 
-            let (paired_left, paired_right) = self.pair_lines(hunk, extension, theme, left_area.width, right_area.width);
+            let (paired_left, paired_right) = self.pair_lines(hunk, file_name, extension, theme, left_area.width, right_area.width);
 
             let max_lines = cmp::max(paired_left.len(), paired_right.len());
             for i in 0..max_lines {
@@ -244,7 +253,7 @@ impl DiffView {
         f.render_widget(Paragraph::new(visible_right), right_area);
     }
 
-    fn pair_lines(&self, hunk: &Hunk, extension: &str, theme: &Theme, left_width: u16, right_width: u16) -> (Vec<Line<'static>>, Vec<Line<'static>>) {
+    fn pair_lines(&self, hunk: &Hunk, file_name: &str, extension: &str, theme: &Theme, left_width: u16, right_width: u16) -> (Vec<Line<'static>>, Vec<Line<'static>>) {
         let mut left: Vec<Line<'static>> = Vec::new();
         let mut right: Vec<Line<'static>> = Vec::new();
         let mut delete_lines: Vec<&DiffLine> = Vec::new();
@@ -253,10 +262,11 @@ impl DiffView {
         for line in &hunk.lines {
             match line.line_type {
                 DiffLineType::Context | DiffLineType::Header => {
-                    flush_buffer_sbs(&mut left, &mut right, &mut delete_lines, &mut add_lines, extension, theme, left_width, right_width);
+                    flush_buffer_sbs(&mut left, &mut right, &mut delete_lines, &mut add_lines, file_name, extension, theme, left_width, right_width);
                     let spans = DiffEngine::highlight_line(
                         &line.content,
                         line.line_type.clone(),
+                        file_name,
                         extension,
                         theme,
                     );
@@ -271,7 +281,7 @@ impl DiffView {
             }
         }
 
-        flush_buffer_sbs(&mut left, &mut right, &mut delete_lines, &mut add_lines, extension, theme, left_width, right_width);
+        flush_buffer_sbs(&mut left, &mut right, &mut delete_lines, &mut add_lines, file_name, extension, theme, left_width, right_width);
 
         (left, right)
     }
@@ -282,6 +292,7 @@ fn flush_buffer_inline(
     line_idx: &mut usize,
     minus_buffer: &mut Vec<&DiffLine>,
     plus_buffer: &mut Vec<&DiffLine>,
+    file_name: &str,
     extension: &str,
     theme: &Theme,
     selected_line: usize,
@@ -298,6 +309,7 @@ fn flush_buffer_inline(
             let (minus_spans, plus_spans) = DiffEngine::highlight_line_pair(
                 &minus_line.content,
                 &plus_line.content,
+                file_name,
                 extension,
                 theme,
             );
@@ -315,6 +327,7 @@ fn flush_buffer_inline(
             let content_spans = DiffEngine::highlight_line(
                 &line.content,
                 DiffLineType::Delete,
+                file_name,
                 extension,
                 theme,
             );
@@ -327,6 +340,7 @@ fn flush_buffer_inline(
             let content_spans = DiffEngine::highlight_line(
                 &line.content,
                 DiffLineType::Add,
+                file_name,
                 extension,
                 theme,
             );
@@ -344,6 +358,7 @@ fn flush_buffer_sbs(
     right: &mut Vec<Line<'static>>,
     dels: &mut Vec<&DiffLine>,
     adds: &mut Vec<&DiffLine>,
+    file_name: &str,
     extension: &str,
     theme: &Theme,
     left_width: u16,
@@ -356,6 +371,7 @@ fn flush_buffer_sbs(
             let (minus_spans, plus_spans) = DiffEngine::highlight_line_pair(
                 &dels[i].content,
                 &adds[i].content,
+                file_name,
                 extension,
                 theme,
             );
@@ -367,6 +383,7 @@ fn flush_buffer_sbs(
             let spans = DiffEngine::highlight_line(
                 &line.content,
                 DiffLineType::Delete,
+                file_name,
                 extension,
                 theme,
             );
@@ -377,6 +394,7 @@ fn flush_buffer_sbs(
             let spans = DiffEngine::highlight_line(
                 &line.content,
                 DiffLineType::Add,
+                file_name,
                 extension,
                 theme,
             );
@@ -433,7 +451,7 @@ fn wrap_and_push(
             lines.push(Line::from(line_buf));
 
             line_buf = Vec::new();
-            line_buf.push(Span::styled("│    │ ".to_string(), prefix_style));
+            line_buf.push(Span::styled("│    │ ".to_string(), Style::default()));
             let mut cont_width = UnicodeWidthStr::width("│    │ ");
 
             let rest_start = available;

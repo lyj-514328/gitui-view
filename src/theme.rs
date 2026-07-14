@@ -1,8 +1,5 @@
 use ratatui::style::{Color, Modifier, Style};
 use std::path::Path;
-use std::rc::Rc;
-
-pub type SharedTheme = Rc<Theme>;
 
 #[derive(Clone, Debug)]
 pub struct Theme {
@@ -40,6 +37,7 @@ pub struct Theme {
     pub status_modified: Color,
     pub diff_delete_highlight: Style,
     pub diff_add_highlight: Style,
+    pub syntax_theme_name: String,
 }
 
 fn parse_color(s: &str) -> Option<Color> {
@@ -101,29 +99,6 @@ fn parse_color(s: &str) -> Option<Color> {
     None
 }
 
-fn format_color(c: Color) -> String {
-    match c {
-        Color::Reset => "Reset".to_string(),
-        Color::Black => "Black".to_string(),
-        Color::Red => "Red".to_string(),
-        Color::Green => "Green".to_string(),
-        Color::Yellow => "Yellow".to_string(),
-        Color::Blue => "Blue".to_string(),
-        Color::Magenta => "Magenta".to_string(),
-        Color::Cyan => "Cyan".to_string(),
-        Color::White => "White".to_string(),
-        Color::DarkGray => "DarkGray".to_string(),
-        Color::LightRed => "LightRed".to_string(),
-        Color::LightGreen => "LightGreen".to_string(),
-        Color::LightYellow => "LightYellow".to_string(),
-        Color::LightBlue => "LightBlue".to_string(),
-        Color::LightMagenta => "LightMagenta".to_string(),
-        Color::LightCyan => "LightCyan".to_string(),
-        Color::Rgb(r, g, b) => format!("#{:02x}{:02x}{:02x}", r, g, b),
-        _ => "Reset".to_string(),
-    }
-}
-
 fn parse_ron_color_value(s: &str) -> Option<Color> {
     let s = s.trim();
     if s.starts_with('"') && s.ends_with('"') {
@@ -142,7 +117,7 @@ impl Theme {
             diff_add_bg: Color::Rgb(0x00, 0x22, 0x00),
             diff_delete_fg: Color::Red,
             diff_delete_bg: Color::Rgb(0x22, 0x00, 0x00),
-            diff_context_bg: Color::Rgb(0x14, 0x14, 0x14),
+            diff_context_bg: Color::Reset,
             diff_header_fg: Color::Blue,
             selection_bg: Color::Blue,
             selection_fg: Color::White,
@@ -169,6 +144,7 @@ impl Theme {
             status_modified: Color::Yellow,
             diff_delete_highlight: Style::default().fg(Color::LightRed).bg(Color::Rgb(0x3a, 0x00, 0x00)),
             diff_add_highlight: Style::default().fg(Color::LightGreen).bg(Color::Rgb(0x00, 0x30, 0x00)),
+            syntax_theme_name: "Monokai Extended".to_string(),
         }
     }
 
@@ -181,7 +157,7 @@ impl Theme {
             diff_add_bg: Color::Rgb(0xe8, 0xff, 0xe8),
             diff_delete_fg: Color::Red,
             diff_delete_bg: Color::Rgb(0xff, 0xe8, 0xe8),
-            diff_context_bg: Color::Rgb(0xf5, 0xf5, 0xf5),
+            diff_context_bg: Color::Reset,
             diff_header_fg: Color::Blue,
             selection_bg: Color::Blue,
             selection_fg: Color::White,
@@ -208,6 +184,7 @@ impl Theme {
             status_modified: Color::Yellow,
             diff_delete_highlight: Style::default().fg(Color::Red).bg(Color::Rgb(0xff, 0xd0, 0xd0)),
             diff_add_highlight: Style::default().fg(Color::Green).bg(Color::Rgb(0xd0, 0xff, 0xd0)),
+            syntax_theme_name: "GitHub".to_string(),
         }
     }
 
@@ -238,43 +215,6 @@ impl Theme {
         }
 
         Ok(theme)
-    }
-
-    pub fn to_ron(&self) -> String {
-        let mut fields = Vec::new();
-        fields.push(format!("    tab_active: \"{}\"", format_color(self.tab_active)));
-        fields.push(format!("    tab_inactive: \"{}\"", format_color(self.tab_inactive)));
-        fields.push(format!("    tab_bar_bg: \"{}\"", format_color(self.tab_bar_bg)));
-        fields.push(format!("    diff_add_fg: \"{}\"", format_color(self.diff_add_fg)));
-        fields.push(format!("    diff_add_bg: \"{}\"", format_color(self.diff_add_bg)));
-        fields.push(format!("    diff_delete_fg: \"{}\"", format_color(self.diff_delete_fg)));
-        fields.push(format!("    diff_delete_bg: \"{}\"", format_color(self.diff_delete_bg)));
-        fields.push(format!("    diff_context_bg: \"{}\"", format_color(self.diff_context_bg)));
-        fields.push(format!("    diff_header_fg: \"{}\"", format_color(self.diff_header_fg)));
-        fields.push(format!("    selection_bg: \"{}\"", format_color(self.selection_bg)));
-        fields.push(format!("    selection_fg: \"{}\"", format_color(self.selection_fg)));
-        fields.push(format!("    border: \"{}\"", format_color(self.border)));
-        fields.push(format!("    border_focused: \"{}\"", format_color(self.border_focused)));
-        fields.push(format!("    title_fg: \"{}\"", format_color(self.title_fg)));
-        fields.push(format!("    dim_text: \"{}\"", format_color(self.dim_text)));
-        fields.push(format!("    normal_bg: \"{}\"", format_color(self.normal_bg)));
-        fields.push(format!("    light_bg: \"{}\"", format_color(self.light_bg)));
-        fields.push(format!("    file_entry: \"{}\"", format_color(self.file_entry)));
-        fields.push(format!("    file_entry_staged: \"{}\"", format_color(self.file_entry_staged)));
-        fields.push(format!("    file_entry_modified: \"{}\"", format_color(self.file_entry_modified)));
-        fields.push(format!("    file_entry_untracked: \"{}\"", format_color(self.file_entry_untracked)));
-        fields.push(format!("    commit_hash: \"{}\"", format_color(self.commit_hash)));
-        fields.push(format!("    commit_msg: \"{}\"", format_color(self.commit_msg)));
-        fields.push(format!("    commit_author: \"{}\"", format_color(self.commit_author)));
-        fields.push(format!("    commit_date: \"{}\"", format_color(self.commit_date)));
-        fields.push(format!("    stash_msg: \"{}\"", format_color(self.stash_msg)));
-        fields.push(format!("    help_key: \"{}\"", format_color(self.help_key)));
-        fields.push(format!("    help_desc: \"{}\"", format_color(self.help_desc)));
-        fields.push(format!("    mode_indicator_bg: \"{}\"", format_color(self.mode_indicator_bg)));
-        fields.push(format!("    status_added: \"{}\"", format_color(self.status_added)));
-        fields.push(format!("    status_deleted: \"{}\"", format_color(self.status_deleted)));
-        fields.push(format!("    status_modified: \"{}\"", format_color(self.status_modified)));
-        format!("(\n{}\n)", fields.join(",\n"))
     }
 
     // --- Tab ---
@@ -345,22 +285,6 @@ impl Theme {
         Style::default()
     }
 
-    // --- File entry ---
-    pub fn file_entry(&self, is_staged: bool, status: &str, selected: bool) -> Style {
-        if selected {
-            return self.selected();
-        }
-        if is_staged {
-            return Style::default().fg(self.file_entry_staged);
-        }
-        let fg = match status {
-            "?" => self.file_entry_untracked,
-            "M" => self.file_entry_modified,
-            _ => self.file_entry,
-        };
-        Style::default().fg(fg)
-    }
-
     // --- Commit info ---
     pub fn commit_hash(&self, selected: bool) -> Style {
         if selected {
@@ -374,20 +298,6 @@ impl Theme {
             self.selected()
         } else {
             Style::default().fg(self.commit_msg)
-        }
-    }
-    pub fn commit_author(&self, selected: bool) -> Style {
-        if selected {
-            self.selected()
-        } else {
-            Style::default().fg(self.commit_author)
-        }
-    }
-    pub fn commit_date(&self, selected: bool) -> Style {
-        if selected {
-            self.selected()
-        } else {
-            Style::default().fg(self.commit_date)
         }
     }
 
@@ -408,28 +318,6 @@ impl Theme {
     }
     pub fn help_desc(&self) -> Style {
         Style::default().fg(self.help_desc)
-    }
-
-    // --- Mode indicator ---
-    pub fn mode_indicator(&self) -> Style {
-        Style::default()
-            .fg(self.diff_add_fg)
-            .add_modifier(Modifier::BOLD)
-    }
-
-    // --- Status chars ---
-    pub fn status_char(&self, status: &str) -> Style {
-        match status {
-            "A" => Style::default()
-                .fg(self.status_added)
-                .add_modifier(Modifier::BOLD),
-            "D" => Style::default()
-                .fg(self.status_deleted)
-                .add_modifier(Modifier::BOLD),
-            _ => Style::default()
-                .fg(self.status_modified)
-                .add_modifier(Modifier::BOLD),
-        }
     }
 }
 

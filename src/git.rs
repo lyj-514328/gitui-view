@@ -27,7 +27,6 @@ pub struct CommitInfo {
     pub short_id: String,
     pub author: String,
     pub time: i64,
-    pub message: String,
     pub summary: String,
 }
 
@@ -67,7 +66,6 @@ pub struct FileDiff {
     pub new_path: String,
     pub status: StatusType,
     pub hunks: Vec<Hunk>,
-    pub binary: bool,
 }
 
 pub struct GitRepo {
@@ -78,12 +76,6 @@ impl GitRepo {
     pub fn open(path: &Path) -> Result<Self> {
         let repo = Repository::open(path)
             .with_context(|| format!("Failed to open git repository at {:?}", path))?;
-        Ok(Self { repo })
-    }
-
-    pub fn open_from_cwd() -> Result<Self> {
-        let repo = Repository::open_from_env()
-            .context("Failed to open git repository from current directory")?;
         Ok(Self { repo })
     }
 
@@ -182,7 +174,6 @@ impl GitRepo {
             let commit = self.repo.find_commit(oid)?;
             let time = commit.time().seconds();
             let author = commit.author().name().unwrap_or("unknown").to_string();
-            let message = commit.message().unwrap_or("").to_string();
             let summary = commit.summary().unwrap_or("").to_string();
 
             commits.push(CommitInfo {
@@ -190,7 +181,6 @@ impl GitRepo {
                 short_id: oid.to_string()[..7].to_string(),
                 author,
                 time,
-                message,
                 summary,
             });
         }
@@ -321,14 +311,11 @@ impl GitRepo {
                     _ => StatusType::Modified,
                 };
 
-                let binary = delta.flags().contains(git2::DiffFlags::BINARY);
-
                 file_diffs.borrow_mut().push(FileDiff {
                     old_path,
                     new_path,
                     status,
                     hunks: Vec::new(),
-                    binary,
                 });
 
                 true

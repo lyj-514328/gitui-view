@@ -21,6 +21,7 @@ use crossterm::{
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::{io, path::Path};
+use terminal_colorsaurus::{color_scheme, QueryOptions};
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
@@ -47,11 +48,13 @@ fn main() -> Result<()> {
         Theme::from_path(path).unwrap_or_else(|e| {
             eprintln!("Warning: failed to load theme from {:?}: {e}", path);
             eprintln!("Using default theme");
-            Theme::light()
+            if is_dark_mode() { Theme::dark() } else { Theme::light() }
         })
     } else {
-        Theme::light()
+        if is_dark_mode() { Theme::dark() } else { Theme::light() }
     };
+
+    diff_engine::init_bat_assets();
 
     let app = App::new(&repo_path, theme)?;
 
@@ -162,4 +165,10 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
             }
         }
     }
+}
+
+fn is_dark_mode() -> bool {
+    color_scheme(QueryOptions::default())
+        .map(|cs| matches!(cs, terminal_colorsaurus::ColorScheme::Dark))
+        .unwrap_or(true)
 }
