@@ -68,7 +68,7 @@ impl DiffView {
             let block = Block::default()
                 .title(" No file selected ")
                 .borders(Borders::ALL)
-                .border_style(theme.border);
+                .border_style(theme.border_style());
             f.render_widget(block, area);
             return;
         };
@@ -91,9 +91,9 @@ impl DiffView {
             ))
             .borders(Borders::ALL)
             .border_style(if self.focused {
-                theme.border_focused
+                theme.border_focused_style()
             } else {
-                theme.border
+                theme.border_style()
             });
 
         let inner_area = block.inner(area);
@@ -115,7 +115,7 @@ impl DiffView {
             if !hunk.lines.is_empty() {
                 let header_line = Line::from(Span::styled(
                     hunk.header.trim().to_string(),
-                    theme.diff_header,
+                    theme.diff_header(),
                 ));
                 lines.push(header_line);
             }
@@ -185,11 +185,11 @@ impl DiffView {
             let header_text = hunk.header.trim().to_string();
             left_lines.push(Line::from(Span::styled(
                 header_text.clone(),
-                theme.diff_header,
+                theme.diff_header(),
             )));
-            right_lines.push(Line::from(Span::styled(header_text, theme.diff_header)));
+            right_lines.push(Line::from(Span::styled(header_text, theme.diff_header())));
 
-            let (paired_left, paired_right) = self.pair_lines(hunk);
+            let (paired_left, paired_right) = self.pair_lines(hunk, theme);
 
             let max_lines = cmp::max(paired_left.len(), paired_right.len());
             for i in 0..max_lines {
@@ -202,7 +202,7 @@ impl DiffView {
                 } else {
                     left_lines.push(Line::from(Span::styled(
                         String::new(),
-                        theme.dim_text,
+                        theme.dim_text(),
                     )));
                 }
 
@@ -215,7 +215,7 @@ impl DiffView {
                 } else {
                     right_lines.push(Line::from(Span::styled(
                         String::new(),
-                        theme.dim_text,
+                        theme.dim_text(),
                     )));
                 }
             }
@@ -236,7 +236,7 @@ impl DiffView {
         f.render_widget(Paragraph::new(visible_right), right_area);
     }
 
-    fn pair_lines(&self, hunk: &Hunk) -> (Vec<(String, Style)>, Vec<(String, Style)>) {
+    fn pair_lines(&self, hunk: &Hunk, theme: &Theme) -> (Vec<(String, Style)>, Vec<(String, Style)>) {
         let mut left = Vec::new();
         let mut right = Vec::new();
         let mut delete_lines: Vec<&DiffLine> = Vec::new();
@@ -255,14 +255,14 @@ impl DiffView {
         for i in 0..pair_count {
             if i < delete_lines.len() {
                 let line = delete_lines[i];
-                left.push((line.content.clone(), self.line_style(line, false, &Theme::dark())));
+                left.push((line.content.clone(), self.line_style(line, false, theme)));
             } else {
                 left.push((String::new(), Style::default()));
             }
 
             if i < add_lines.len() {
                 let line = add_lines[i];
-                right.push((line.content.clone(), self.line_style(line, false, &Theme::dark())));
+                right.push((line.content.clone(), self.line_style(line, false, theme)));
             } else {
                 right.push((String::new(), Style::default()));
             }
@@ -273,28 +273,10 @@ impl DiffView {
 
     fn line_style(&self, line: &DiffLine, selected: bool, theme: &Theme) -> Style {
         match line.line_type {
-            DiffLineType::Add => {
-                if selected {
-                    theme.diff_add_highlight
-                } else {
-                    theme.diff_add
-                }
-            }
-            DiffLineType::Delete => {
-                if selected {
-                    theme.diff_delete_highlight
-                } else {
-                    theme.diff_delete
-                }
-            }
-            DiffLineType::Header => theme.diff_header,
-            DiffLineType::Context => {
-                if selected {
-                    theme.selected
-                } else {
-                    theme.diff_context
-                }
-            }
+            DiffLineType::Add => theme.diff_add(selected),
+            DiffLineType::Delete => theme.diff_delete(selected),
+            DiffLineType::Header => theme.diff_header(),
+            DiffLineType::Context => theme.diff_context(selected),
         }
     }
 }

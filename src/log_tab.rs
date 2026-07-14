@@ -3,6 +3,7 @@ use crate::theme::Theme;
 use chrono::{Local, TimeZone};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
+    style::Style,
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
     Frame,
@@ -123,7 +124,7 @@ impl LogTab {
         let block = Block::default()
             .title(" Log ")
             .borders(Borders::ALL)
-            .border_style(theme.border);
+            .border_style(theme.border_style());
         let inner = block.inner(area);
         f.render_widget(block, area);
 
@@ -139,21 +140,9 @@ impl LogTab {
                 .map(|t| t.format("%Y-%m-%d %H:%M").to_string())
                 .unwrap_or_default();
 
-            let hash_style = if is_selected {
-                theme.selected
-            } else {
-                theme.commit_hash
-            };
-            let msg_style = if is_selected {
-                theme.selected
-            } else {
-                theme.commit_msg
-            };
-            let meta_style = if is_selected {
-                theme.selected
-            } else {
-                theme.dim_text
-            };
+            let hash_style = theme.commit_hash(is_selected);
+            let msg_style = theme.commit_msg(is_selected);
+            let meta_style = theme.dim_text();
 
             let line = Line::from(vec![
                 Span::styled(format!("{} {} ", marker, commit.short_id), hash_style),
@@ -170,7 +159,7 @@ impl LogTab {
         if lines.is_empty() {
             lines.push(Line::from(Span::styled(
                 " (no commits)",
-                theme.dim_text,
+                theme.dim_text(),
             )));
         }
 
@@ -187,7 +176,7 @@ impl LogTab {
         let block = Block::default()
             .title(" Files ")
             .borders(Borders::ALL)
-            .border_style(theme.border);
+            .border_style(theme.border_style());
         let inner = block.inner(area);
         f.render_widget(block, area);
 
@@ -197,9 +186,9 @@ impl LogTab {
             let is_selected = i == self.file_selected;
             let marker = if is_selected { ">" } else { " " };
             let style = if is_selected {
-                theme.selected
+                theme.selected()
             } else {
-                theme.file_entry
+                Style::default().fg(theme.file_entry).bg(theme.light_bg)
             };
 
             lines.push(Line::from(Span::styled(
@@ -211,7 +200,7 @@ impl LogTab {
         if lines.is_empty() {
             lines.push(Line::from(Span::styled(
                 " (no files)",
-                theme.dim_text,
+                theme.dim_text(),
             )));
         }
 

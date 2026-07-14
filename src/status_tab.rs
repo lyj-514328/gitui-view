@@ -73,7 +73,7 @@ impl StatusTab {
         let block = Block::default()
             .title(" Status ")
             .borders(Borders::ALL)
-            .border_style(theme.border);
+            .border_style(theme.border_style());
         let inner = block.inner(area);
         f.render_widget(block, area);
 
@@ -82,7 +82,7 @@ impl StatusTab {
         if !self.staged.is_empty() {
             lines.push(Line::from(Span::styled(
                 " Staged:",
-                theme.title,
+                theme.title(),
             )));
             for (i, entry) in self.staged.iter().enumerate() {
                 let is_selected = i == self.selected;
@@ -99,7 +99,7 @@ impl StatusTab {
         if !self.unstaged.is_empty() {
             lines.push(Line::from(Span::styled(
                 " Unstaged:",
-                theme.title,
+                theme.title(),
             )));
             for (i, entry) in self.unstaged.iter().enumerate() {
                 let idx = self.staged.len() + i;
@@ -117,7 +117,7 @@ impl StatusTab {
         if lines.is_empty() {
             lines.push(Line::from(Span::styled(
                 " (clean)",
-                theme.dim_text,
+                theme.dim_text(),
             )));
         }
 
@@ -144,21 +144,17 @@ fn status_char(st: &StatusType) -> &'static str {
 }
 
 fn status_style(entry: &StatusEntry, selected: bool, theme: &Theme) -> Style {
-    let base = if entry.staged {
-        match entry.status {
-            StatusType::Added => theme.file_entry_staged,
-            _ => theme.file_entry_staged,
-        }
+    if selected {
+        return theme.selected();
+    }
+    if entry.staged {
+        Style::default().fg(theme.file_entry_staged).bg(theme.light_bg)
     } else {
-        match entry.status {
+        let fg = match entry.status {
             StatusType::Untracked => theme.file_entry_untracked,
             StatusType::Modified => theme.file_entry_modified,
             _ => theme.file_entry,
-        }
-    };
-    if selected {
-        theme.selected
-    } else {
-        base
+        };
+        Style::default().fg(fg).bg(theme.light_bg)
     }
 }

@@ -32,9 +32,8 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(repo_path: &Path) -> anyhow::Result<Self> {
+    pub fn new(repo_path: &Path, theme: Theme) -> anyhow::Result<Self> {
         let repo = GitRepo::open(repo_path)?;
-        let theme = Theme::dark();
         let mut app = Self {
             repo,
             current_tab: Tab::Status,
@@ -226,9 +225,9 @@ impl App {
                 .enumerate()
                 .map(|(i, title)| {
                     let style = if i == tab_index {
-                        self.theme.tab_active
+                        self.theme.tab_active_style()
                     } else {
-                        self.theme.tab_inactive
+                        self.theme.tab_inactive_style()
                     };
                     Line::from(Span::styled(*title, style))
                 })
@@ -237,7 +236,7 @@ impl App {
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(self.theme.tab_bar),
+                .border_style(self.theme.tab_bar_style()),
         )
         .select(tab_index);
 
@@ -282,12 +281,12 @@ impl App {
             " q:quit | h:help | d:show diff | \u{2191}\u{2193}:navigate | Tab:next | 1-3:goto tab ".to_string()
         };
 
-        let status_line = Line::from(Span::styled(mode_text, self.theme.dim_text));
+        let status_line = Line::from(Span::styled(mode_text, self.theme.dim_text()));
         f.render_widget(
             Paragraph::new(status_line).block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .border_style(self.theme.border),
+                    .border_style(self.theme.border_style()),
             ),
             main_layout[2],
         );
@@ -315,44 +314,44 @@ impl App {
         };
 
         let help_lines = vec![
-            Line::from(Span::styled(" Help ", self.theme.title)),
-            Line::from(Span::styled("", self.theme.normal)),
+            Line::from(Span::styled(" Help ", self.theme.title())),
+            Line::from(Span::styled("", self.theme.normal())),
             Line::from(vec![
-                Span::styled("  q          ", self.theme.help_key),
-                Span::styled("Quit", self.theme.help_desc),
+                Span::styled("  q          ", self.theme.help_key()),
+                Span::styled("Quit", self.theme.help_desc()),
             ]),
             Line::from(vec![
-                Span::styled("  h          ", self.theme.help_key),
-                Span::styled("Toggle this help", self.theme.help_desc),
+                Span::styled("  h          ", self.theme.help_key()),
+                Span::styled("Toggle this help", self.theme.help_desc()),
             ]),
             Line::from(vec![
-                Span::styled("  Tab / \u{2190} \u{2192}  ", self.theme.help_key),
-                Span::styled("Switch tabs", self.theme.help_desc),
+                Span::styled("  Tab / \u{2190} \u{2192}  ", self.theme.help_key()),
+                Span::styled("Switch tabs", self.theme.help_desc()),
             ]),
             Line::from(vec![
-                Span::styled("  1-3        ", self.theme.help_key),
-                Span::styled("Go to tab by number", self.theme.help_desc),
+                Span::styled("  1-3        ", self.theme.help_key()),
+                Span::styled("Go to tab by number", self.theme.help_desc()),
             ]),
             Line::from(vec![
-                Span::styled("  \u{2191}/\u{2193}        ", self.theme.help_key),
-                Span::styled("Navigate / scroll", self.theme.help_desc),
+                Span::styled("  \u{2191}/\u{2193}        ", self.theme.help_key()),
+                Span::styled("Navigate / scroll", self.theme.help_desc()),
             ]),
             Line::from(vec![
-                Span::styled("  d          ", self.theme.help_key),
-                Span::styled("Toggle diff view", self.theme.help_desc),
+                Span::styled("  d          ", self.theme.help_key()),
+                Span::styled("Toggle diff view", self.theme.help_desc()),
             ]),
             Line::from(vec![
-                Span::styled("  m          ", self.theme.help_key),
-                Span::styled("Toggle inline/side-by-side", self.theme.help_desc),
+                Span::styled("  m          ", self.theme.help_key()),
+                Span::styled("Toggle inline/side-by-side", self.theme.help_desc()),
             ]),
-            Line::from(Span::styled("", self.theme.normal)),
-            Line::from(Span::styled(" Press any key to close ", self.theme.dim_text)),
+            Line::from(Span::styled("", self.theme.normal())),
+            Line::from(Span::styled(" Press any key to close ", self.theme.dim_text())),
         ];
 
         let help_block = Block::default()
             .borders(Borders::ALL)
-            .border_style(self.theme.border_focused)
-            .style(self.theme.normal);
+            .border_style(self.theme.border_focused_style())
+            .style(self.theme.normal());
 
         f.render_widget(
             Paragraph::new(help_lines)

@@ -3,6 +3,7 @@ use crate::theme::Theme;
 use chrono::{Local, TimeZone};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
+    style::Style,
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
     Frame,
@@ -123,7 +124,7 @@ impl StashesTab {
         let block = Block::default()
             .title(" Stashes ")
             .borders(Borders::ALL)
-            .border_style(theme.border);
+            .border_style(theme.border_style());
         let inner = block.inner(area);
         f.render_widget(block, area);
 
@@ -139,16 +140,8 @@ impl StashesTab {
                 .map(|t| t.format("%Y-%m-%d %H:%M").to_string())
                 .unwrap_or_default();
 
-            let msg_style = if is_selected {
-                theme.selected
-            } else {
-                theme.stash_msg
-            };
-            let meta_style = if is_selected {
-                theme.selected
-            } else {
-                theme.dim_text
-            };
+            let msg_style = theme.stash_msg(is_selected);
+            let meta_style = theme.dim_text();
 
             lines.push(Line::from(vec![
                 Span::styled(
@@ -166,7 +159,7 @@ impl StashesTab {
         if lines.is_empty() {
             lines.push(Line::from(Span::styled(
                 " (no stashes)",
-                theme.dim_text,
+                theme.dim_text(),
             )));
         }
 
@@ -183,7 +176,7 @@ impl StashesTab {
         let block = Block::default()
             .title(" Files ")
             .borders(Borders::ALL)
-            .border_style(theme.border);
+            .border_style(theme.border_style());
         let inner = block.inner(area);
         f.render_widget(block, area);
 
@@ -193,9 +186,9 @@ impl StashesTab {
             let is_selected = i == self.file_selected;
             let marker = if is_selected { ">" } else { " " };
             let style = if is_selected {
-                theme.selected
+                theme.selected()
             } else {
-                theme.file_entry
+                Style::default().fg(theme.file_entry).bg(theme.light_bg)
             };
 
             lines.push(Line::from(Span::styled(
@@ -207,7 +200,7 @@ impl StashesTab {
         if lines.is_empty() {
             lines.push(Line::from(Span::styled(
                 " (no files)",
-                theme.dim_text,
+                theme.dim_text(),
             )));
         }
 

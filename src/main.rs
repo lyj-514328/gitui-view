@@ -7,6 +7,7 @@ mod status_tab;
 mod theme;
 
 use crate::app::App;
+use crate::theme::Theme;
 use anyhow::Result;
 use crossterm::{
     event::{
@@ -20,13 +21,36 @@ use std::{io, path::Path};
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
-    let repo_path = if args.len() > 1 {
-        Path::new(&args[1]).to_path_buf()
+    let mut repo_path = std::env::current_dir()?;
+    let mut theme_path = None;
+
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--theme" | "-t" => {
+                i += 1;
+                theme_path = args.get(i).map(|s| Path::new(s).to_path_buf());
+            }
+            _ => {
+                if !args[i].starts_with('-') {
+                    repo_path = Path::new(&args[i]).to_path_buf();
+                }
+            }
+        }
+        i += 1;
+    }
+
+    let theme = if let Some(path) = &theme_path {
+        Theme::from_path(path).unwrap_or_else(|e| {
+            eprintln!("Warning: failed to load theme from {:?}: {e}", path);
+            eprintln!("Using default theme");
+            Theme::dark()
+        })
     } else {
-        std::env::current_dir()?
+        Theme::dark()
     };
 
-    let app = App::new(&repo_path)?;
+    let app = App::new(&repo_path, theme)?;
 
     enable_raw_mode()?;
     let mut stdout = io::stdout();
