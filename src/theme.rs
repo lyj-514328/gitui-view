@@ -37,6 +37,7 @@ pub struct Theme {
     pub status_modified: Color,
     pub diff_delete_highlight: Style,
     pub diff_add_highlight: Style,
+    pub line_number_fg: Color,
     pub syntax_theme_name: String,
 }
 
@@ -114,9 +115,9 @@ impl Theme {
             tab_inactive: Color::DarkGray,
             tab_bar_bg: Color::Reset,
             diff_add_fg: Color::Green,
-            diff_add_bg: Color::Rgb(0x00, 0x22, 0x00),
+            diff_add_bg: Color::Rgb(0x00, 0x28, 0x00),
             diff_delete_fg: Color::Red,
-            diff_delete_bg: Color::Rgb(0x22, 0x00, 0x00),
+            diff_delete_bg: Color::Rgb(0x3f, 0x00, 0x01),
             diff_context_bg: Color::Reset,
             diff_header_fg: Color::Blue,
             selection_bg: Color::Blue,
@@ -142,8 +143,9 @@ impl Theme {
             status_added: Color::LightGreen,
             status_deleted: Color::LightRed,
             status_modified: Color::Yellow,
-            diff_delete_highlight: Style::default().fg(Color::LightRed).bg(Color::Rgb(0x3a, 0x00, 0x00)),
-            diff_add_highlight: Style::default().fg(Color::LightGreen).bg(Color::Rgb(0x00, 0x30, 0x00)),
+            diff_delete_highlight: Style::default().fg(Color::LightRed).bg(Color::Rgb(0x90, 0x10, 0x11)),
+            diff_add_highlight: Style::default().fg(Color::LightGreen).bg(Color::Rgb(0x00, 0x60, 0x00)),
+            line_number_fg: Color::Rgb(0x58, 0x58, 0x58),
             syntax_theme_name: "Monokai Extended".to_string(),
         }
     }
@@ -154,9 +156,9 @@ impl Theme {
             tab_inactive: Color::DarkGray,
             tab_bar_bg: Color::Reset,
             diff_add_fg: Color::Green,
-            diff_add_bg: Color::Rgb(0xe8, 0xff, 0xe8),
+            diff_add_bg: Color::Rgb(0xd0, 0xff, 0xd0),
             diff_delete_fg: Color::Red,
-            diff_delete_bg: Color::Rgb(0xff, 0xe8, 0xe8),
+            diff_delete_bg: Color::Rgb(0xff, 0xe0, 0xe0),
             diff_context_bg: Color::Reset,
             diff_header_fg: Color::Blue,
             selection_bg: Color::Blue,
@@ -182,8 +184,9 @@ impl Theme {
             status_added: Color::Green,
             status_deleted: Color::Red,
             status_modified: Color::Yellow,
-            diff_delete_highlight: Style::default().fg(Color::Red).bg(Color::Rgb(0xff, 0xd0, 0xd0)),
-            diff_add_highlight: Style::default().fg(Color::Green).bg(Color::Rgb(0xd0, 0xff, 0xd0)),
+            diff_delete_highlight: Style::default().fg(Color::Red).bg(Color::Rgb(0xff, 0xc0, 0xc0)),
+            diff_add_highlight: Style::default().fg(Color::Green).bg(Color::Rgb(0xa0, 0xef, 0xa0)),
+            line_number_fg: Color::Rgb(0x99, 0x99, 0x99),
             syntax_theme_name: "GitHub".to_string(),
         }
     }
@@ -280,6 +283,9 @@ impl Theme {
     }
     pub fn dim_text(&self) -> Style {
         Style::default().fg(self.dim_text)
+    }
+    pub fn line_number_style(&self) -> Style {
+        Style::default().fg(self.line_number_fg)
     }
     pub fn normal(&self) -> Style {
         Style::default()
@@ -380,6 +386,7 @@ fn apply_field(theme: &mut Theme, key: &str, color: Color) {
         "status_added" => theme.status_added = color,
         "status_deleted" => theme.status_deleted = color,
         "status_modified" => theme.status_modified = color,
+        "line_number_fg" => theme.line_number_fg = color,
         _ => {}
     }
 }
