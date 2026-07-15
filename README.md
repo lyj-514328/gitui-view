@@ -6,6 +6,10 @@
 
 A terminal-based Git repository browser with inline and side-by-side diff views, built with [ratatui](https://github.com/ratatui/ratatui).
 
+![demo](https://raw.githubusercontent.com/lyj-514328/gitui-view/master/demo.gif)
+
+gitui-view is a lite version of [gitui](https://github.com/gitui-org/gitui), drawing inspiration from [delta](https://github.com/dandavison/delta) for diff rendering. It focuses on the core Git browsing experience — status, log, stashes, and diff review — with a clean and minimal interface.
+
 ## Features
 
 - **Status Tab** — View staged and unstaged file changes
