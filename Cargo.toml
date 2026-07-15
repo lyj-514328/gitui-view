@@ -1,8 +1,20 @@
 [package]
-name = "git-view"
+name = "gitui-view"
 version = "0.1.0"
 edition = "2021"
-description = "A TUI app for reviewing git diffs with inline and side-by-side views"
+rust-version = "1.77"
+description = "A terminal-based Git repository browser with inline and side-by-side diff views"
+license = "MIT"
+repository = "https://github.com/lyj-514328/gitui-view"
+homepage = "https://github.com/lyj-514328/gitui-view"
+documentation = "https://docs.rs/gitui-view"
+readme = "README.md"
+keywords = ["git", "terminal", "gui", "cli", "ui"]
+categories = ["command-line-utilities"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 anyhow = "1.0"
