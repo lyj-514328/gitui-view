@@ -8,6 +8,7 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
     Frame,
 };
+use std::cell::Cell;
 use std::cmp;
 use std::path::Path;
 use unicode_width::UnicodeWidthStr;
@@ -24,6 +25,7 @@ pub struct DiffView {
     pub selected_line: usize,
     pub mode: DiffViewMode,
     pub focused: bool,
+    visible_height: Cell<usize>,
 }
 
 impl DiffView {
@@ -34,6 +36,7 @@ impl DiffView {
             selected_line: 0,
             mode: DiffViewMode::SideBySide,
             focused: false,
+            visible_height: Cell::new(0),
         }
     }
 
@@ -56,6 +59,25 @@ impl DiffView {
 
     pub fn scroll_up(&mut self, amount: usize) {
         self.scroll = self.scroll.saturating_sub(amount);
+    }
+
+    pub fn page_down(&mut self) {
+        let page_size = self.visible_height.get().max(1);
+        let max = self.total_lines().saturating_sub(1);
+        self.scroll = cmp::min(self.scroll + page_size, max);
+    }
+
+    pub fn page_up(&mut self) {
+        let page_size = self.visible_height.get().max(1);
+        self.scroll = self.scroll.saturating_sub(page_size);
+    }
+
+    pub fn go_to_top(&mut self) {
+        self.scroll = 0;
+    }
+
+    pub fn go_to_end(&mut self) {
+        self.scroll = self.total_lines().saturating_sub(1);
     }
 
     pub fn total_lines(&self) -> usize {
@@ -99,6 +121,7 @@ impl DiffView {
             });
 
         let inner_area = block.inner(area);
+        self.visible_height.set(inner_area.height as usize);
         f.render_widget(block, area);
 
         match self.mode {

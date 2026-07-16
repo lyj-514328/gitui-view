@@ -128,6 +128,26 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
                 KeyCode::Down | KeyCode::Char('j') => {
                     app.move_down();
                 }
+                KeyCode::PageUp => {
+                    if app.show_diff {
+                        app.diff_view.page_up();
+                    }
+                }
+                KeyCode::PageDown => {
+                    if app.show_diff {
+                        app.diff_view.page_down();
+                    }
+                }
+                KeyCode::Home => {
+                    if app.show_diff {
+                        app.diff_view.go_to_top();
+                    }
+                }
+                KeyCode::End => {
+                    if app.show_diff {
+                        app.diff_view.go_to_end();
+                    }
+                }
                 KeyCode::Tab => {
                     app.next_tab();
                 }
