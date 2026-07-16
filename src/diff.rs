@@ -26,6 +26,7 @@ pub struct DiffView {
     pub mode: DiffViewMode,
     pub focused: bool,
     visible_height: Cell<usize>,
+    total_rendered_lines: Cell<usize>,
 }
 
 impl DiffView {
@@ -37,6 +38,7 @@ impl DiffView {
             mode: DiffViewMode::SideBySide,
             focused: false,
             visible_height: Cell::new(0),
+            total_rendered_lines: Cell::new(0),
         }
     }
 
@@ -53,7 +55,10 @@ impl DiffView {
     }
 
     pub fn scroll_down(&mut self, amount: usize) {
-        let max = self.total_lines().saturating_sub(1);
+        let max = self
+            .total_rendered_lines
+            .get()
+            .saturating_sub(self.visible_height.get().max(1));
         self.scroll = cmp::min(self.scroll + amount, max);
     }
 
@@ -63,7 +68,10 @@ impl DiffView {
 
     pub fn page_down(&mut self) {
         let page_size = self.visible_height.get().max(1);
-        let max = self.total_lines().saturating_sub(1);
+        let max = self
+            .total_rendered_lines
+            .get()
+            .saturating_sub(self.visible_height.get().max(1));
         self.scroll = cmp::min(self.scroll + page_size, max);
     }
 
@@ -77,18 +85,15 @@ impl DiffView {
     }
 
     pub fn go_to_end(&mut self) {
-        self.scroll = self.total_lines().saturating_sub(1);
-    }
-
-    pub fn total_lines(&self) -> usize {
-        self.file_diff
-            .as_ref()
-            .map(|d| d.hunks.iter().map(|h| h.lines.len()).sum())
-            .unwrap_or(0)
+        self.scroll = self
+            .total_rendered_lines
+            .get()
+            .saturating_sub(self.visible_height.get().max(1));
     }
 
     pub fn render(&self, f: &mut Frame, area: Rect, theme: &Theme) {
         let Some(file_diff) = &self.file_diff else {
+            self.total_rendered_lines.set(0);
             let block = Block::default()
                 .title(" No file selected ")
                 .borders(Borders::ALL)
@@ -178,6 +183,9 @@ impl DiffView {
             flush_buffer_inline(&mut lines, &mut line_idx, &mut minus_buffer, &mut plus_buffer, file_name, extension, theme, area.width);
         }
 
+        let total = lines.len();
+        self.total_rendered_lines.set(total);
+
         let visible_lines: Vec<Line> = lines
             .into_iter()
             .skip(self.scroll)
@@ -254,6 +262,9 @@ impl DiffView {
                 }
             }
         }
+
+        let total = cmp::max(left_lines.len(), right_lines.len());
+        self.total_rendered_lines.set(total);
 
         let visible_left: Vec<Line> = left_lines
             .into_iter()
