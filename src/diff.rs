@@ -425,7 +425,7 @@ fn wrap_and_push(
     }
 
     let mut line_buf = Vec::new();
-    line_buf.push(Span::styled(prefix.to_string(), prefix_style));
+    line_buf.push(Span::styled(prefix.to_string(), line_number_style));
 
     let mut current_width = prefix_width;
 
@@ -455,8 +455,8 @@ fn wrap_and_push(
             lines.push(Line::from(line_buf));
 
             line_buf = Vec::new();
-            line_buf.push(Span::styled("│    │ ".to_string(), line_number_style));
-            let mut cont_width = UnicodeWidthStr::width("│    │ ");
+            line_buf.push(Span::styled(" │    │ ".to_string(), line_number_style));
+            let mut cont_width = UnicodeWidthStr::width(" │    │ ");
 
             let rest_start = available;
             if rest_start < span_width {

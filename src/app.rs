@@ -259,24 +259,38 @@ impl App {
         let repo_path = self.repo.workdir()
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_default();
-        let path_len = repo_path.len() as u16;
-        let tabs_width = header_inner.width.saturating_sub(path_len + 2).max(1);
+
+        const DIVIDER_PAD_SPACES: usize = 2;
+        const SIDE_PADS: usize = 2;
+        const MARGIN_LEFT_AND_RIGHT: usize = 2;
+        let tabs_natural_width: usize =
+            tab_titles.iter().map(|t| t.len()).sum::<usize>()
+                + tab_titles.len().saturating_sub(1)
+                    * (1 + DIVIDER_PAD_SPACES)
+                + SIDE_PADS + MARGIN_LEFT_AND_RIGHT;
+        let tabs_width = (tabs_natural_width as u16).min(header_inner.width);
+        let path_width = header_inner.width.saturating_sub(tabs_width);
 
         let header_split = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Length(tabs_width), Constraint::Min(1)])
+            .constraints([Constraint::Length(tabs_width), Constraint::Fill(1)])
             .split(header_inner);
 
         f.render_widget(tabs, header_split[0]);
 
-        let path_text = Line::from(Span::styled(
-            repo_path,
-            self.theme.dim_text(),
-        ));
-        f.render_widget(
-            Paragraph::new(path_text).alignment(ratatui::layout::Alignment::Right),
-            header_split[1],
-        );
+        if path_width > 3 && !repo_path.is_empty() {
+            let truncated = if repo_path.len() as u16 > path_width {
+                let keep = (path_width as usize).saturating_sub(3);
+                format!("...{}", &repo_path[repo_path.len().saturating_sub(keep)..])
+            } else {
+                repo_path.clone()
+            };
+            let path_text = Line::from(Span::styled(truncated, self.theme.dim_text()));
+            f.render_widget(
+                Paragraph::new(path_text).alignment(ratatui::layout::Alignment::Right),
+                header_split[1],
+            );
+        }
 
         let content_area = main_layout[1];
 
