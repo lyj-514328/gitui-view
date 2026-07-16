@@ -133,14 +133,8 @@ impl DiffView {
             for diff_line in &hunk.lines {
                 match diff_line.line_type {
                     DiffLineType::Context | DiffLineType::Header => {
-                        flush_buffer_inline(&mut lines, &mut line_idx, &mut minus_buffer, &mut plus_buffer, file_name, extension, theme, self.selected_line, area.width);
+                        flush_buffer_inline(&mut lines, &mut line_idx, &mut minus_buffer, &mut plus_buffer, file_name, extension, theme, area.width);
 
-                        let is_selected = line_idx == self.selected_line;
-                        let style = if is_selected {
-                            theme.selected()
-                        } else {
-                            theme.diff_context(is_selected)
-                        };
                         let content_spans = DiffEngine::highlight_line(
                             &diff_line.content,
                             diff_line.line_type.clone(),
@@ -149,8 +143,8 @@ impl DiffView {
                             theme,
                         );
                         let lineno = diff_line.old_lineno.unwrap_or(diff_line.new_lineno.unwrap_or(0));
-                        let prefix = format!(" │{:^4}│ ", lineno);
-                        wrap_and_push(&mut lines, &prefix, &content_spans, area.width as usize, style, theme.line_number_style());
+                        let prefix_spans = build_prefix_spans(' ', lineno, theme.line_number_style(), theme.line_number_column_style());
+                        wrap_and_push(&mut lines, &prefix_spans, &content_spans, area.width as usize, theme.line_number_column_style());
                         line_idx += 1;
                     }
                     DiffLineType::Delete => minus_buffer.push(diff_line),
@@ -158,7 +152,7 @@ impl DiffView {
                 }
             }
 
-            flush_buffer_inline(&mut lines, &mut line_idx, &mut minus_buffer, &mut plus_buffer, file_name, extension, theme, self.selected_line, area.width);
+            flush_buffer_inline(&mut lines, &mut line_idx, &mut minus_buffer, &mut plus_buffer, file_name, extension, theme, area.width);
         }
 
         let visible_lines: Vec<Line> = lines
@@ -259,7 +253,7 @@ impl DiffView {
         let mut delete_lines: Vec<&DiffLine> = Vec::new();
         let mut add_lines: Vec<&DiffLine> = Vec::new();
 
-        let line_number_style = theme.line_number_style();
+        let column_style = theme.line_number_column_style();
 
         for line in &hunk.lines {
             match line.line_type {
@@ -274,9 +268,9 @@ impl DiffView {
                     );
                     let left_lineno = line.old_lineno;
                     let right_lineno = line.new_lineno;
-                    let left_prefix = format!("│{:^4}│ ", left_lineno.unwrap_or(0));
-                    let right_prefix = format!("│{:^4}│ ", right_lineno.unwrap_or(0));
-                    wrap_and_push_pair(&mut left, &mut right, &left_prefix, &right_prefix, &spans, &spans, left_width as usize, right_width as usize, line_number_style);
+                    let left_prefix_spans = build_prefix_spans('│', left_lineno.unwrap_or(0), theme.line_number_style(), column_style);
+                    let right_prefix_spans = build_prefix_spans('│', right_lineno.unwrap_or(0), theme.line_number_style(), column_style);
+                    wrap_and_push_pair(&mut left, &mut right, &left_prefix_spans, &right_prefix_spans, &spans, &spans, left_width as usize, right_width as usize, column_style);
                 }
                 DiffLineType::Delete => delete_lines.push(line),
                 DiffLineType::Add => add_lines.push(line),
@@ -297,14 +291,10 @@ fn flush_buffer_inline(
     file_name: &str,
     extension: &str,
     theme: &Theme,
-    selected_line: usize,
     area_width: u16,
 ) {
     let pair_count = cmp::max(minus_buffer.len(), plus_buffer.len());
     for i in 0..pair_count {
-        let is_minus_selected = *line_idx == selected_line;
-        let is_plus_selected = *line_idx == selected_line;
-
         if i < minus_buffer.len() && i < plus_buffer.len() {
             let minus_line = &minus_buffer[i];
             let plus_line = &plus_buffer[i];
@@ -316,16 +306,15 @@ fn flush_buffer_inline(
                 theme,
             );
 
-            let prefix = format!("-│{:^4}│ ", minus_line.old_lineno.unwrap_or(0));
-            wrap_and_push(lines, &prefix, &minus_spans, area_width as usize, theme.diff_delete(is_minus_selected), theme.line_number_style());
+            let prefix_spans = build_prefix_spans('-', minus_line.old_lineno.unwrap_or(0), theme.line_number_minus_style(), theme.line_number_column_style());
+            wrap_and_push(lines, &prefix_spans, &minus_spans, area_width as usize, theme.line_number_column_style());
             *line_idx += 1;
 
-            let prefix = format!("+│{:^4}│ ", plus_line.new_lineno.unwrap_or(0));
-            wrap_and_push(lines, &prefix, &plus_spans, area_width as usize, theme.diff_add(is_plus_selected), theme.line_number_style());
+            let prefix_spans = build_prefix_spans('+', plus_line.new_lineno.unwrap_or(0), theme.line_number_plus_style(), theme.line_number_column_style());
+            wrap_and_push(lines, &prefix_spans, &plus_spans, area_width as usize, theme.line_number_column_style());
             *line_idx += 1;
         } else if i < minus_buffer.len() {
             let line = minus_buffer[i];
-            let is_selected = *line_idx == selected_line;
             let content_spans = DiffEngine::highlight_line(
                 &line.content,
                 DiffLineType::Delete,
@@ -333,12 +322,11 @@ fn flush_buffer_inline(
                 extension,
                 theme,
             );
-            let prefix = format!("-│{:^4}│ ", line.old_lineno.unwrap_or(0));
-            wrap_and_push(lines, &prefix, &content_spans, area_width as usize, theme.diff_delete(is_selected), theme.line_number_style());
+            let prefix_spans = build_prefix_spans('-', line.old_lineno.unwrap_or(0), theme.line_number_minus_style(), theme.line_number_column_style());
+            wrap_and_push(lines, &prefix_spans, &content_spans, area_width as usize, theme.line_number_column_style());
             *line_idx += 1;
         } else {
             let line = plus_buffer[i];
-            let is_selected = *line_idx == selected_line;
             let content_spans = DiffEngine::highlight_line(
                 &line.content,
                 DiffLineType::Add,
@@ -346,8 +334,8 @@ fn flush_buffer_inline(
                 extension,
                 theme,
             );
-            let prefix = format!("+│{:^4}│ ", line.new_lineno.unwrap_or(0));
-            wrap_and_push(lines, &prefix, &content_spans, area_width as usize, theme.diff_add(is_selected), theme.line_number_style());
+            let prefix_spans = build_prefix_spans('+', line.new_lineno.unwrap_or(0), theme.line_number_plus_style(), theme.line_number_column_style());
+            wrap_and_push(lines, &prefix_spans, &content_spans, area_width as usize, theme.line_number_column_style());
             *line_idx += 1;
         }
     }
@@ -366,7 +354,7 @@ fn flush_buffer_sbs(
     left_width: u16,
     right_width: u16,
 ) {
-    let line_number_style = theme.line_number_style();
+    let column_style = theme.line_number_column_style();
     let empty_prefix = "│    │ ".to_string();
     let pair_count = cmp::max(dels.len(), adds.len());
     for i in 0..pair_count {
@@ -378,9 +366,9 @@ fn flush_buffer_sbs(
                 extension,
                 theme,
             );
-            let left_prefix = format!("│{:^4}│ ", dels[i].old_lineno.unwrap_or(0));
-            let right_prefix = format!("│{:^4}│ ", adds[i].new_lineno.unwrap_or(0));
-            wrap_and_push_pair(left, right, &left_prefix, &right_prefix, &minus_spans, &plus_spans, left_width as usize, right_width as usize, line_number_style);
+            let left_prefix_spans = build_prefix_spans('│', dels[i].old_lineno.unwrap_or(0), theme.line_number_minus_style(), column_style);
+            let right_prefix_spans = build_prefix_spans('│', adds[i].new_lineno.unwrap_or(0), theme.line_number_plus_style(), column_style);
+            wrap_and_push_pair(left, right, &left_prefix_spans, &right_prefix_spans, &minus_spans, &plus_spans, left_width as usize, right_width as usize, column_style);
         } else if i < dels.len() {
             let line = dels[i];
             let spans = DiffEngine::highlight_line(
@@ -390,8 +378,9 @@ fn flush_buffer_sbs(
                 extension,
                 theme,
             );
-            let left_prefix = format!("│{:^4}│ ", line.old_lineno.unwrap_or(0));
-            wrap_and_push_pair(left, right, &left_prefix, &empty_prefix, &spans, &[], left_width as usize, right_width as usize, line_number_style);
+            let left_prefix_spans = build_prefix_spans('│', line.old_lineno.unwrap_or(0), theme.line_number_minus_style(), column_style);
+            let right_prefix_spans = vec![Span::styled(empty_prefix.to_string(), column_style)];
+            wrap_and_push_pair(left, right, &left_prefix_spans, &right_prefix_spans, &spans, &[], left_width as usize, right_width as usize, column_style);
         } else {
             let line = adds[i];
             let spans = DiffEngine::highlight_line(
@@ -401,31 +390,45 @@ fn flush_buffer_sbs(
                 extension,
                 theme,
             );
-            let right_prefix = format!("│{:^4}│ ", line.new_lineno.unwrap_or(0));
-            wrap_and_push_pair(left, right, &empty_prefix, &right_prefix, &[], &spans, left_width as usize, right_width as usize, line_number_style);
+            let left_prefix_spans = vec![Span::styled(empty_prefix.to_string(), column_style)];
+            let right_prefix_spans = build_prefix_spans('│', line.new_lineno.unwrap_or(0), theme.line_number_plus_style(), column_style);
+            wrap_and_push_pair(left, right, &left_prefix_spans, &right_prefix_spans, &[], &spans, left_width as usize, right_width as usize, column_style);
         }
     }
     dels.clear();
     adds.clear();
 }
 
+fn build_prefix_spans(sign: char, lineno: u32, number_style: Style, column_style: Style) -> Vec<Span<'static>> {
+    let mut spans = Vec::new();
+    if sign == '│' {
+        spans.push(Span::styled("│".to_string(), column_style));
+    } else {
+        spans.push(Span::styled(format!("{}│", sign), column_style));
+    }
+    spans.push(Span::styled(format!("{:^4}", lineno), number_style));
+    spans.push(Span::styled("│ ".to_string(), column_style));
+    spans
+}
+
 fn wrap_and_push(
     lines: &mut Vec<Line<'static>>,
-    prefix: &str,
+    prefix_spans: &[Span<'static>],
     content_spans: &[Span<'static>],
     max_width: usize,
-    prefix_style: Style,
-    line_number_style: Style,
+    cont_column_style: Style,
 ) {
-    let prefix_width = UnicodeWidthStr::width(prefix);
+    let prefix_width: usize = prefix_spans.iter().map(|s| UnicodeWidthStr::width(s.content.as_ref())).sum();
     let content_width = max_width.saturating_sub(prefix_width);
     if content_width == 0 {
-        lines.push(Line::from(Span::styled(prefix.to_string(), prefix_style)));
+        let mut line_buf = Vec::new();
+        line_buf.extend(prefix_spans.iter().cloned());
+        lines.push(Line::from(line_buf));
         return;
     }
 
     let mut line_buf = Vec::new();
-    line_buf.push(Span::styled(prefix.to_string(), line_number_style));
+    line_buf.extend(prefix_spans.iter().cloned());
 
     let mut current_width = prefix_width;
 
@@ -455,7 +458,7 @@ fn wrap_and_push(
             lines.push(Line::from(line_buf));
 
             line_buf = Vec::new();
-            line_buf.push(Span::styled(" │    │ ".to_string(), line_number_style));
+            line_buf.push(Span::styled(" │    │ ".to_string(), cont_column_style));
             let mut cont_width = UnicodeWidthStr::width(" │    │ ");
 
             let rest_start = available;
@@ -477,22 +480,26 @@ fn wrap_and_push(
 fn wrap_and_push_pair(
     left: &mut Vec<Line<'static>>,
     right: &mut Vec<Line<'static>>,
-    left_prefix: &str,
-    right_prefix: &str,
+    left_prefix_spans: &[Span<'static>],
+    right_prefix_spans: &[Span<'static>],
     left_spans: &[Span<'static>],
     right_spans: &[Span<'static>],
     left_max_width: usize,
     right_max_width: usize,
-    line_number_style: Style,
+    cont_column_style: Style,
 ) {
-    let left_prefix_width = UnicodeWidthStr::width(left_prefix);
-    let right_prefix_width = UnicodeWidthStr::width(right_prefix);
+    let left_prefix_width: usize = left_prefix_spans.iter().map(|s| UnicodeWidthStr::width(s.content.as_ref())).sum();
+    let right_prefix_width: usize = right_prefix_spans.iter().map(|s| UnicodeWidthStr::width(s.content.as_ref())).sum();
     let left_content_width = left_max_width.saturating_sub(left_prefix_width);
     let right_content_width = right_max_width.saturating_sub(right_prefix_width);
 
     if left_content_width == 0 && right_content_width == 0 {
-        left.push(Line::from(Span::styled(left_prefix.to_string(), line_number_style)));
-        right.push(Line::from(Span::styled(right_prefix.to_string(), line_number_style)));
+        let mut lspans = Vec::new();
+        lspans.extend(left_prefix_spans.iter().cloned());
+        left.push(Line::from(lspans));
+        let mut rspans = Vec::new();
+        rspans.extend(right_prefix_spans.iter().cloned());
+        right.push(Line::from(rspans));
         return;
     }
 
@@ -504,14 +511,24 @@ fn wrap_and_push_pair(
     let empty_cont_prefix = "│    │ ";
 
     for i in 0..max_chunks {
-        let lprefix = if i == 0 { left_prefix } else { empty_cont_prefix };
-        let rprefix = if i == 0 { right_prefix } else { empty_cont_prefix };
+        let lprefix = if i == 0 { None } else { Some(empty_cont_prefix) };
+        let rprefix = if i == 0 { None } else { Some(empty_cont_prefix) };
 
-        let mut lspans = vec![Span::styled(lprefix.to_string(), line_number_style)];
-        let mut rspans = vec![Span::styled(rprefix.to_string(), line_number_style)];
-
+        let mut lspans = Vec::new();
+        if let Some(p) = lprefix {
+            lspans.push(Span::styled(p.to_string(), cont_column_style));
+        } else {
+            lspans.extend(left_prefix_spans.iter().cloned());
+        }
         if i < left_chunks.len() {
             lspans.extend(left_chunks[i].clone());
+        }
+
+        let mut rspans = Vec::new();
+        if let Some(p) = rprefix {
+            rspans.push(Span::styled(p.to_string(), cont_column_style));
+        } else {
+            rspans.extend(right_prefix_spans.iter().cloned());
         }
         if i < right_chunks.len() {
             rspans.extend(right_chunks[i].clone());

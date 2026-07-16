@@ -37,7 +37,10 @@ pub struct Theme {
     pub status_modified: Color,
     pub diff_delete_highlight: Style,
     pub diff_add_highlight: Style,
+    pub line_number_column_fg: Color,
     pub line_number_fg: Color,
+    pub line_number_minus_fg: Color,
+    pub line_number_plus_fg: Color,
     pub syntax_theme_name: String,
 }
 
@@ -145,7 +148,10 @@ impl Theme {
             status_modified: Color::Yellow,
             diff_delete_highlight: Style::default().fg(Color::LightRed).bg(Color::Rgb(0x90, 0x10, 0x11)),
             diff_add_highlight: Style::default().fg(Color::LightGreen).bg(Color::Rgb(0x00, 0x60, 0x00)),
+            line_number_column_fg: Color::Blue,
             line_number_fg: Color::Rgb(0x58, 0x58, 0x58),
+            line_number_minus_fg: Color::Red,
+            line_number_plus_fg: Color::Green,
             syntax_theme_name: "Monokai Extended".to_string(),
         }
     }
@@ -186,7 +192,10 @@ impl Theme {
             status_modified: Color::Yellow,
             diff_delete_highlight: Style::default().fg(Color::Red).bg(Color::Rgb(0xff, 0xc0, 0xc0)),
             diff_add_highlight: Style::default().fg(Color::Green).bg(Color::Rgb(0xa0, 0xef, 0xa0)),
+            line_number_column_fg: Color::Blue,
             line_number_fg: Color::Rgb(0x99, 0x99, 0x99),
+            line_number_minus_fg: Color::Red,
+            line_number_plus_fg: Color::Green,
             syntax_theme_name: "GitHub".to_string(),
         }
     }
@@ -286,6 +295,15 @@ impl Theme {
     }
     pub fn line_number_style(&self) -> Style {
         Style::default().fg(self.line_number_fg)
+    }
+    pub fn line_number_column_style(&self) -> Style {
+        Style::default().fg(self.line_number_column_fg)
+    }
+    pub fn line_number_minus_style(&self) -> Style {
+        Style::default().fg(self.line_number_minus_fg)
+    }
+    pub fn line_number_plus_style(&self) -> Style {
+        Style::default().fg(self.line_number_plus_fg)
     }
     pub fn normal(&self) -> Style {
         Style::default()
@@ -387,6 +405,9 @@ fn apply_field(theme: &mut Theme, key: &str, color: Color) {
         "status_deleted" => theme.status_deleted = color,
         "status_modified" => theme.status_modified = color,
         "line_number_fg" => theme.line_number_fg = color,
+        "line_number_column_fg" => theme.line_number_column_fg = color,
+        "line_number_minus_fg" => theme.line_number_minus_fg = color,
+        "line_number_plus_fg" => theme.line_number_plus_fg = color,
         _ => {}
     }
 }
