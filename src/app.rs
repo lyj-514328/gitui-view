@@ -1,6 +1,6 @@
 use crate::diff::{DiffView, DiffViewMode};
 use crate::git::GitRepo;
-use crate::log_tab::LogTab;
+use crate::log_tab::{self, LogTab};
 use crate::stashes_tab::StashesTab;
 use crate::status_tab::{StatusFocus, StatusTab};
 use crate::theme::Theme;
@@ -88,8 +88,29 @@ impl App {
         }
     }
 
+    pub fn log_tab_enter(&mut self) {
+        let prev = self.log_tab.depth;
+        if self.log_tab.enter() {
+            match (prev, self.log_tab.depth) {
+                (log_tab::LogDepth::Commits, log_tab::LogDepth::Details) => {
+                    self.log_tab.load_files(&self.repo);
+                }
+                (_, log_tab::LogDepth::FilesDiff) => {
+                    self.log_tab.load_diff_for_file(&mut self.diff_view, &self.repo);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    pub fn log_tab_back(&mut self) {
+        self.log_tab.back();
+    }
+
     pub fn is_any_diff_active(&self) -> bool {
-        self.show_diff || (self.current_tab == Tab::Status && self.status_tab.focus == StatusFocus::Diff)
+        self.show_diff
+            || (self.current_tab == Tab::Status && self.status_tab.focus == StatusFocus::Diff)
+            || (self.current_tab == Tab::Log && self.log_tab.depth >= log_tab::LogDepth::FilesDiff)
     }
 
     pub fn toggle_diff_fullscreen(&mut self) {
@@ -113,6 +134,8 @@ impl App {
             self.diff_view.scroll_down(1);
         } else if self.current_tab == Tab::Status && self.status_tab.focus == StatusFocus::Diff {
             self.diff_view.scroll_down(1);
+        } else if self.current_tab == Tab::Log && self.log_tab.depth == log_tab::LogDepth::Diff {
+            self.diff_view.scroll_down(1);
         } else {
             match self.current_tab {
                 Tab::Status => {
@@ -120,10 +143,12 @@ impl App {
                     self.load_diff_for_selection();
                 }
                 Tab::Log => {
-                    if self.log_tab.show_files {
-                        self.log_tab.file_move_down();
-                    } else {
-                        self.log_tab.move_down();
+                    self.log_tab.move_down();
+                    if self.log_tab.depth == log_tab::LogDepth::Details {
+                        self.log_tab.load_files(&self.repo);
+                    }
+                    if self.log_tab.depth == log_tab::LogDepth::FilesDiff {
+                        self.log_tab.load_diff_for_file(&mut self.diff_view, &self.repo);
                     }
                 }
                 Tab::Stashes => {
@@ -142,6 +167,8 @@ impl App {
             self.diff_view.scroll_up(1);
         } else if self.current_tab == Tab::Status && self.status_tab.focus == StatusFocus::Diff {
             self.diff_view.scroll_up(1);
+        } else if self.current_tab == Tab::Log && self.log_tab.depth == log_tab::LogDepth::Diff {
+            self.diff_view.scroll_up(1);
         } else {
             match self.current_tab {
                 Tab::Status => {
@@ -149,10 +176,12 @@ impl App {
                     self.load_diff_for_selection();
                 }
                 Tab::Log => {
-                    if self.log_tab.show_files {
-                        self.log_tab.file_move_up();
-                    } else {
-                        self.log_tab.move_up();
+                    self.log_tab.move_up();
+                    if self.log_tab.depth == log_tab::LogDepth::Details {
+                        self.log_tab.load_files(&self.repo);
+                    }
+                    if self.log_tab.depth == log_tab::LogDepth::FilesDiff {
+                        self.log_tab.load_diff_for_file(&mut self.diff_view, &self.repo);
                     }
                 }
                 Tab::Stashes => {
@@ -179,25 +208,6 @@ impl App {
                 self.diff_view.clear();
             }
             Tab::Log => {
-                if self.log_tab.show_files {
-                    if let Some(path) = self.log_tab.current_file_path() {
-                        if let Some(commit_id) = self.log_tab.current_commit_id() {
-                            if let Ok(diffs) = self.repo.get_commit_diff(&commit_id) {
-                                for diff in diffs {
-                                    let diff_path = if !diff.new_path.is_empty() {
-                                        diff.new_path.clone()
-                                    } else {
-                                        diff.old_path.clone()
-                                    };
-                                    if diff_path == path {
-                                        self.diff_view.set_diff(diff);
-                                        return;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
                 self.diff_view.clear();
             }
             Tab::Stashes => {
@@ -392,7 +402,24 @@ impl App {
     fn render_tab_content(&self, f: &mut Frame, area: Rect) {
         match self.current_tab {
             Tab::Status => self.status_tab.render(f, area, &self.theme),
-            Tab::Log => self.log_tab.render(f, area, &self.theme),
+            Tab::Log => {
+                match self.log_tab.depth {
+                    log_tab::LogDepth::Commits | log_tab::LogDepth::Details => {
+                        self.log_tab.render(f, area, &self.theme);
+                    }
+                    log_tab::LogDepth::FilesDiff => {
+                        let split = Layout::default()
+                            .direction(Direction::Horizontal)
+                            .constraints([Constraint::Ratio(2, 5), Constraint::Ratio(3, 5)])
+                            .split(area);
+                        self.log_tab.render(f, split[0], &self.theme);
+                        self.diff_view.render(f, split[1], &self.theme);
+                    }
+                    log_tab::LogDepth::Diff => {
+                        self.diff_view.render(f, area, &self.theme);
+                    }
+                }
+            }
             Tab::Stashes => self.stashes_tab.render(f, area, &self.theme),
         }
     }

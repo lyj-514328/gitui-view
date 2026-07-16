@@ -110,6 +110,13 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
                                 app.diff_fullscreen = true;
                             }
                         }
+                        app::Tab::Log => {
+                            if app.log_tab.depth >= log_tab::LogDepth::FilesDiff {
+                                app.log_tab_back();
+                            } else {
+                                app.log_tab_enter();
+                            }
+                        }
                         _ => {
                             app.toggle_diff();
                         }
@@ -181,6 +188,8 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
                         if app.status_tab.focus == StatusFocus::Diff {
                             app.diff_fullscreen = true;
                         }
+                    } else if app.current_tab == app::Tab::Log {
+                        app.log_tab_enter();
                     } else {
                         app.next_tab();
                     }
@@ -193,6 +202,8 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
                         } else {
                             app.status_tab.focus_left();
                         }
+                    } else if app.current_tab == app::Tab::Log {
+                        app.log_tab_back();
                     } else {
                         app.prev_tab();
                     }
@@ -205,10 +216,12 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
                     {
                         app.status_tab.focus = StatusFocus::Unstaged;
                         app.diff_fullscreen = false;
+                    } else if app.current_tab == app::Tab::Log
+                        && app.log_tab.depth != log_tab::LogDepth::Commits
+                    {
+                        app.log_tab_back();
                     } else if app.show_diff {
                         app.toggle_diff();
-                    } else if matches!(app.current_tab, app::Tab::Log) && app.log_tab.show_files {
-                        app.log_tab.close_files();
                     } else if matches!(app.current_tab, app::Tab::Stashes) && app.stashes_tab.show_files {
                         app.stashes_tab.close_files();
                     }
@@ -225,11 +238,7 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
                             }
                         }
                         app::Tab::Log => {
-                            if !app.log_tab.show_files {
-                                app.log_tab.toggle_files(&app.repo);
-                            } else {
-                                app.toggle_diff();
-                            }
+                            app.log_tab_enter();
                         }
                         app::Tab::Stashes => {
                             if !app.stashes_tab.show_files {

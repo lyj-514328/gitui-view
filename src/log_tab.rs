@@ -1,3 +1,4 @@
+use crate::diff::DiffView;
 use crate::git::{CommitInfo, GitRepo};
 use crate::theme::Theme;
 use chrono::{Local, TimeZone};
@@ -10,15 +11,22 @@ use ratatui::{
 };
 use std::cmp;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum LogDepth {
+    Commits,
+    Details,
+    FilesDiff,
+    Diff,
+}
+
 pub struct LogTab {
     pub commits: Vec<CommitInfo>,
     pub selected: usize,
     pub scroll: usize,
-    pub show_files: bool,
     pub files: Vec<String>,
     pub file_selected: usize,
     pub file_scroll: usize,
-    pub info_scroll: usize,
+    pub depth: LogDepth,
 }
 
 impl LogTab {
@@ -27,11 +35,10 @@ impl LogTab {
             commits: Vec::new(),
             selected: 0,
             scroll: 0,
-            show_files: false,
             files: Vec::new(),
             file_selected: 0,
             file_scroll: 0,
-            info_scroll: 0,
+            depth: LogDepth::Commits,
         }
     }
 
@@ -41,102 +48,165 @@ impl LogTab {
             self.selected = 0;
             self.scroll = 0;
         }
-        self.show_files = false;
         self.files.clear();
         self.file_selected = 0;
         self.file_scroll = 0;
-        self.info_scroll = 0;
+        self.depth = LogDepth::Commits;
+    }
+
+    pub fn load_files(&mut self, repo: &GitRepo) {
+        if let Some(commit_id) = self.current_commit_id() {
+            if let Ok(diffs) = repo.get_commit_diff(&commit_id) {
+                let mut files = Vec::new();
+                for diff in &diffs {
+                    let path = if !diff.new_path.is_empty() {
+                        diff.new_path.clone()
+                    } else {
+                        diff.old_path.clone()
+                    };
+                    files.push(path);
+                }
+                self.files = files;
+                self.file_selected = 0;
+                self.file_scroll = 0;
+            }
+        }
+    }
+
+    pub fn enter(&mut self) -> bool {
+        match self.depth {
+            LogDepth::Commits => {
+                if !self.commits.is_empty() {
+                    self.depth = LogDepth::Details;
+                    true
+                } else {
+                    false
+                }
+            }
+            LogDepth::Details => {
+                if !self.files.is_empty() {
+                    self.depth = LogDepth::FilesDiff;
+                    true
+                } else {
+                    false
+                }
+            }
+            LogDepth::FilesDiff => {
+                if !self.files.is_empty() {
+                    self.depth = LogDepth::Diff;
+                    true
+                } else {
+                    false
+                }
+            }
+            LogDepth::Diff => false,
+        }
+    }
+
+    pub fn back(&mut self) {
+        self.depth = match self.depth {
+            LogDepth::Commits => LogDepth::Commits,
+            LogDepth::Details => LogDepth::Commits,
+            LogDepth::FilesDiff => LogDepth::Details,
+            LogDepth::Diff => LogDepth::FilesDiff,
+        };
     }
 
     pub fn move_down(&mut self) {
-        let max = self.commits.len().saturating_sub(1);
-        self.selected = cmp::min(self.selected + 1, max);
+        match self.depth {
+            LogDepth::Commits | LogDepth::Details => {
+                let max = self.commits.len().saturating_sub(1);
+                self.selected = cmp::min(self.selected + 1, max);
+            }
+            LogDepth::FilesDiff => {
+                let max = self.files.len().saturating_sub(1);
+                self.file_selected = cmp::min(self.file_selected + 1, max);
+            }
+            LogDepth::Diff => {}
+        }
     }
 
     pub fn move_up(&mut self) {
-        self.selected = self.selected.saturating_sub(1);
-        self.info_scroll = 0;
+        match self.depth {
+            LogDepth::Commits | LogDepth::Details => {
+                self.selected = self.selected.saturating_sub(1);
+            }
+            LogDepth::FilesDiff => {
+                self.file_selected = self.file_selected.saturating_sub(1);
+            }
+            LogDepth::Diff => {}
+        }
     }
 
     pub fn current_commit_id(&self) -> Option<String> {
         self.commits.get(self.selected).map(|c| c.id.clone())
     }
 
-    pub fn toggle_files(&mut self, repo: &GitRepo) {
-        if self.show_files {
-            self.show_files = false;
-            self.files.clear();
-            self.file_selected = 0;
-            self.file_scroll = 0;
-            self.info_scroll = 0;
-        } else {
-            if let Some(commit_id) = self.current_commit_id() {
-                if let Ok(diffs) = repo.get_commit_diff(&commit_id) {
-                    let mut files = Vec::new();
-                    for diff in &diffs {
-                        let path = if !diff.new_path.is_empty() {
-                            diff.new_path.clone()
-                        } else {
-                            diff.old_path.clone()
-                        };
-                        files.push(path);
-                    }
-                    self.files = files;
-                    self.file_selected = 0;
-                    self.file_scroll = 0;
-                    self.info_scroll = 0;
-                    self.show_files = true;
-                    return;
-                }
-            }
-        }
-    }
-
-    pub fn close_files(&mut self) {
-        self.show_files = false;
-        self.files.clear();
-        self.file_selected = 0;
-        self.file_scroll = 0;
-        self.info_scroll = 0;
-    }
-
-    pub fn file_move_down(&mut self) {
-        let max = self.files.len().saturating_sub(1);
-        self.file_selected = cmp::min(self.file_selected + 1, max);
-    }
-
-    pub fn file_move_up(&mut self) {
-        self.file_selected = self.file_selected.saturating_sub(1);
-    }
-
     pub fn current_file_path(&self) -> Option<String> {
         self.files.get(self.file_selected).cloned()
     }
 
-    pub fn render(&self, f: &mut Frame, area: Rect, theme: &Theme) {
-        if self.show_files {
-            let split = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Ratio(1, 3),
-                    Constraint::Ratio(1, 3),
-                    Constraint::Ratio(1, 3),
-                ])
-                .split(area);
+    pub fn load_diff_for_file(&self, diff_view: &mut DiffView, repo: &GitRepo) {
+        if let Some(path) = self.current_file_path() {
+            if let Some(commit_id) = self.current_commit_id() {
+                if let Ok(diffs) = repo.get_commit_diff(&commit_id) {
+                    for diff in diffs {
+                        let dp = if !diff.new_path.is_empty() {
+                            diff.new_path.clone()
+                        } else {
+                            diff.old_path.clone()
+                        };
+                        if dp == path {
+                            diff_view.set_diff(diff);
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+        diff_view.clear();
+    }
 
-            self.render_commit_list(f, split[0], theme);
-            self.render_commit_info(f, split[1], theme);
-            self.render_file_list(f, split[2], theme);
-        } else {
-            self.render_commit_list(f, area, theme);
+    pub fn render(&self, f: &mut Frame, area: Rect, theme: &Theme) {
+        match self.depth {
+            LogDepth::Commits => {
+                self.render_commit_list(f, area, theme, true);
+            }
+            LogDepth::Details => {
+                let split = Layout::default()
+                    .direction(Direction::Horizontal)
+                    .constraints([Constraint::Ratio(2, 5), Constraint::Ratio(3, 5)])
+                    .split(area);
+
+                self.render_commit_list(f, split[0], theme, false);
+                let right = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)])
+                    .split(split[1]);
+                self.render_commit_info(f, right[0], theme);
+                self.render_file_list(f, right[1], theme, false);
+            }
+            LogDepth::FilesDiff | LogDepth::Diff => {
+                let split = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)])
+                    .split(area);
+                self.render_commit_info(f, split[0], theme);
+                self.render_file_list(f, split[1], theme, self.depth == LogDepth::FilesDiff);
+            }
         }
     }
 
-    fn render_commit_list(&self, f: &mut Frame, area: Rect, theme: &Theme) {
+    fn render_commit_list(&self, f: &mut Frame, area: Rect, theme: &Theme, focused: bool) {
+        let border_style = if focused {
+            theme.border_focused_style()
+        } else {
+            theme.border_style()
+        };
         let block = Block::default()
             .title(" Log ")
             .borders(Borders::ALL)
-            .border_style(theme.border_style());
+            .border_style(border_style);
         let inner = block.inner(area);
         f.render_widget(block, area);
 
@@ -234,11 +304,16 @@ impl LogTab {
         }
     }
 
-    fn render_file_list(&self, f: &mut Frame, area: Rect, theme: &Theme) {
+    fn render_file_list(&self, f: &mut Frame, area: Rect, theme: &Theme, focused: bool) {
+        let border_style = if focused {
+            theme.border_focused_style()
+        } else {
+            theme.border_style()
+        };
         let block = Block::default()
             .title(" Files ")
             .borders(Borders::ALL)
-            .border_style(theme.border_style());
+            .border_style(border_style);
         let inner = block.inner(area);
         f.render_widget(block, area);
 
