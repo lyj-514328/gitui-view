@@ -175,8 +175,13 @@ impl DiffView {
                             extension,
                             theme,
                         );
-                        let lineno = diff_line.old_lineno.unwrap_or(diff_line.new_lineno.unwrap_or(0));
-                        let prefix_spans = build_prefix_spans(' ', lineno, theme.line_number_style(), theme.line_number_column_style());
+                        let prefix_spans = build_dual_prefix_spans(
+                            diff_line.old_lineno,
+                            diff_line.new_lineno,
+                            theme.line_number_style(),
+                            theme.line_number_style(),
+                            theme.line_number_column_style(),
+                        );
                         wrap_and_push(&mut lines, &prefix_spans, &content_spans, area.width as usize, theme.line_number_column_style());
                         line_idx += 1;
                     }
@@ -354,6 +359,7 @@ fn flush_buffer_inline(
     theme: &Theme,
     area_width: u16,
 ) {
+    let column_style = theme.line_number_column_style();
     let pair_count = cmp::max(minus_buffer.len(), plus_buffer.len());
     for i in 0..pair_count {
         if i < minus_buffer.len() && i < plus_buffer.len() {
@@ -367,12 +373,24 @@ fn flush_buffer_inline(
                 theme,
             );
 
-            let prefix_spans = build_prefix_spans('-', minus_line.old_lineno.unwrap_or(0), theme.line_number_minus_style(), theme.line_number_column_style());
-            wrap_and_push(lines, &prefix_spans, &minus_spans, area_width as usize, theme.line_number_column_style());
+            let prefix_spans = build_dual_prefix_spans(
+                minus_line.old_lineno,
+                None,
+                theme.line_number_minus_style(),
+                theme.line_number_style(),
+                column_style,
+            );
+            wrap_and_push(lines, &prefix_spans, &minus_spans, area_width as usize, column_style);
             *line_idx += 1;
 
-            let prefix_spans = build_prefix_spans('+', plus_line.new_lineno.unwrap_or(0), theme.line_number_plus_style(), theme.line_number_column_style());
-            wrap_and_push(lines, &prefix_spans, &plus_spans, area_width as usize, theme.line_number_column_style());
+            let prefix_spans = build_dual_prefix_spans(
+                None,
+                plus_line.new_lineno,
+                theme.line_number_style(),
+                theme.line_number_plus_style(),
+                column_style,
+            );
+            wrap_and_push(lines, &prefix_spans, &plus_spans, area_width as usize, column_style);
             *line_idx += 1;
         } else if i < minus_buffer.len() {
             let line = minus_buffer[i];
@@ -383,8 +401,14 @@ fn flush_buffer_inline(
                 extension,
                 theme,
             );
-            let prefix_spans = build_prefix_spans('-', line.old_lineno.unwrap_or(0), theme.line_number_minus_style(), theme.line_number_column_style());
-            wrap_and_push(lines, &prefix_spans, &content_spans, area_width as usize, theme.line_number_column_style());
+            let prefix_spans = build_dual_prefix_spans(
+                line.old_lineno,
+                None,
+                theme.line_number_minus_style(),
+                theme.line_number_style(),
+                column_style,
+            );
+            wrap_and_push(lines, &prefix_spans, &content_spans, area_width as usize, column_style);
             *line_idx += 1;
         } else {
             let line = plus_buffer[i];
@@ -395,8 +419,14 @@ fn flush_buffer_inline(
                 extension,
                 theme,
             );
-            let prefix_spans = build_prefix_spans('+', line.new_lineno.unwrap_or(0), theme.line_number_plus_style(), theme.line_number_column_style());
-            wrap_and_push(lines, &prefix_spans, &content_spans, area_width as usize, theme.line_number_column_style());
+            let prefix_spans = build_dual_prefix_spans(
+                None,
+                line.new_lineno,
+                theme.line_number_style(),
+                theme.line_number_plus_style(),
+                column_style,
+            );
+            wrap_and_push(lines, &prefix_spans, &content_spans, area_width as usize, column_style);
             *line_idx += 1;
         }
     }
@@ -472,6 +502,29 @@ fn build_prefix_spans(sign: char, lineno: u32, number_style: Style, column_style
     spans
 }
 
+fn build_dual_prefix_spans(
+    old_lineno: Option<u32>,
+    new_lineno: Option<u32>,
+    left_style: Style,
+    right_style: Style,
+    column_style: Style,
+) -> Vec<Span<'static>> {
+    let mut spans = Vec::new();
+    let left_text = match old_lineno {
+        Some(n) => format!("{:^4}", n),
+        None => "    ".to_string(),
+    };
+    spans.push(Span::styled(left_text, left_style));
+    spans.push(Span::styled("│".to_string(), column_style));
+    let right_text = match new_lineno {
+        Some(n) => format!("{:^4}", n),
+        None => "    ".to_string(),
+    };
+    spans.push(Span::styled(right_text, right_style));
+    spans.push(Span::styled("│ ".to_string(), column_style));
+    spans
+}
+
 fn wrap_and_push(
     lines: &mut Vec<Line<'static>>,
     prefix_spans: &[Span<'static>],
@@ -519,8 +572,8 @@ fn wrap_and_push(
             lines.push(Line::from(line_buf));
 
             line_buf = Vec::new();
-            line_buf.push(Span::styled(" │    │ ".to_string(), cont_column_style));
-            let mut cont_width = UnicodeWidthStr::width(" │    │ ");
+            line_buf.push(Span::styled("    │    │ ".to_string(), cont_column_style));
+            let mut cont_width = UnicodeWidthStr::width("    │    │ ");
 
             let rest_start = available;
             if rest_start < span_width {
