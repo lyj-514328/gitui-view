@@ -129,6 +129,11 @@ impl DiffView {
         self.visible_height.set(inner_area.height as usize);
         f.render_widget(block, area);
 
+        if file_diff.hunks.is_empty() && (file_diff.sizes.0 > 0 || file_diff.sizes.1 > 0) {
+            self.render_binary(f, inner_area, file_diff, theme);
+            return;
+        }
+
         match self.mode {
             DiffViewMode::Inline => self.render_inline(f, inner_area, theme),
             DiffViewMode::SideBySide => self.render_side_by_side(f, inner_area, theme),
@@ -314,6 +319,28 @@ impl DiffView {
         flush_buffer_sbs(&mut left, &mut right, &mut delete_lines, &mut add_lines, file_name, extension, theme, left_width, right_width);
 
         (left, right)
+    }
+
+    fn render_binary(&self, f: &mut Frame, area: Rect, file_diff: &FileDiff, theme: &Theme) {
+        let size = format_bytes(file_diff.sizes.0, file_diff.sizes.1);
+        let is_positive = file_diff.size_delta >= 0;
+        let delta = if is_positive {
+            format!("+{}", format_bytes_single(file_diff.size_delta as u64))
+        } else {
+            format!("-{}", format_bytes_single(file_diff.size_delta.unsigned_abs()))
+        };
+        let delta_style = if is_positive {
+            theme.diff_add(false)
+        } else {
+            theme.diff_delete(false)
+        };
+
+        let lines = vec![Line::from(vec![
+            Span::styled(format!(" size: {} -> {} ", size.0, size.1), theme.dim_text()),
+            Span::styled(format!("({})", delta), delta_style),
+        ])];
+
+        f.render_widget(Paragraph::new(lines), area);
     }
 }
 
@@ -647,4 +674,23 @@ fn chunk_spans(spans: &[Span<'static>], content_width: usize) -> Vec<Vec<Span<'s
     }
 
     chunks
+}
+
+fn format_bytes(old_bytes: u64, new_bytes: u64) -> (String, String) {
+    (format_bytes_single(old_bytes), format_bytes_single(new_bytes))
+}
+
+fn format_bytes_single(bytes: u64) -> String {
+    const KB: u64 = 1024;
+    const MB: u64 = 1024 * 1024;
+
+    if bytes >= MB {
+        let mb = bytes as f64 / MB as f64;
+        format!("{:.1} MB", mb)
+    } else if bytes >= KB {
+        let kb = bytes as f64 / KB as f64;
+        format!("{:.1} KB", kb)
+    } else {
+        format!("{} B", bytes)
+    }
 }

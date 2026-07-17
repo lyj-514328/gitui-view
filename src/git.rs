@@ -66,6 +66,10 @@ pub struct FileDiff {
     pub new_path: String,
     pub status: StatusType,
     pub hunks: Vec<Hunk>,
+    /// old and new file size in bytes
+    pub sizes: (u64, u64),
+    /// size delta in bytes
+    pub size_delta: i64,
 }
 
 pub struct GitRepo {
@@ -311,11 +315,16 @@ impl GitRepo {
                     _ => StatusType::Modified,
                 };
 
+                let old_size = delta.old_file().size();
+                let new_size = delta.new_file().size();
+
                 file_diffs.borrow_mut().push(FileDiff {
                     old_path,
                     new_path,
                     status,
                     hunks: Vec::new(),
+                    sizes: (old_size, new_size),
+                    size_delta: (new_size as i64) - (old_size as i64),
                 });
 
                 true
