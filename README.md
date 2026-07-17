@@ -12,13 +12,17 @@ gitui-view is a lite version of [gitui](https://github.com/gitui-org/gitui), dra
 
 ## Features
 
-- **Status Tab** — View staged and unstaged file changes
-- **Log Tab** — Browse commit history with author, timestamp, and summary
-- **Stashes Tab** — List and inspect stashed changes
-- **Diff View** — Review diffs in inline or side-by-side mode, with syntax highlighting
+- **Status Tab** — View staged and unstaged file changes with file-level diff panel
+- **Log Tab** — Browse commit history with 4-level depth navigation:
+  - **Level 1 (Commits)** — Full-screen commit list
+  - **Level 2 (Details)** — Commit list + commit details & file list side-by-side
+  - **Level 3 (FilesDiff)** — Commit details & file list + file diff side-by-side
+  - **Level 4 (Diff)** — Full-screen diff view
+- **Stashes Tab** — List and inspect stashed changes with the same 4-level depth navigation
+- **Diff View** — Review diffs in inline or side-by-side mode, with syntax highlighting and binary file size display
 - **Auto Theme Detection** — Automatically picks light or dark theme based on your terminal color scheme
 - **Custom Themes** — Load custom themes via RON files
-- **Keyboard-driven** — Vim-style navigation with `j`/`k`, tab switching, and quick-jump keys
+- **Keyboard-driven** — Vim-style navigation with `j`/`k`, depth-based tab navigation, and quick-jump keys
 
 ## Keybindings
 
@@ -26,13 +30,17 @@ gitui-view is a lite version of [gitui](https://github.com/gitui-org/gitui), dra
 |---|---|
 | `q` | Quit |
 | `h` | Toggle help |
-| `d` | Toggle diff view |
-| `m` | Toggle inline / side-by-side diff mode |
-| `Tab` / `←` `→` | Switch tabs |
-| `1` `2` `3` | Go to Status / Log / Stashes tab |
+| `Tab` / `Shift+Tab` | Switch tabs (Status ↔ Log ↔ Stashes) |
+| `1` / `2` / `3` | Go to Status / Log / Stashes tab |
 | `↑` `↓` / `k` `j` | Navigate list / scroll diff |
-| `Enter` | Show file list for commit/stash, or show diff for file |
-| `Esc` | Go back |
+| `Enter` / `→` | Enter next level (List → Details → FilesDiff → Diff) |
+| `Esc` | Return to previous level |
+| `←` | Status tab: switch between staged/unstaged panel |
+| `d` | Enter / exit diff view (context-dependent) |
+| `f` | Toggle fullscreen diff |
+| `m` | Toggle inline / side-by-side diff mode |
+| `PageUp` / `PageDown` | Scroll diff by page |
+| `Home` / `End` | Go to diff top / bottom |
 
 ## Usage
 
