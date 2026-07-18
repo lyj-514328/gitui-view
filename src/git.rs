@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use git2::{DiffOptions, Repository, Sort};
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug)]
@@ -26,7 +27,11 @@ pub struct CommitInfo {
     pub id: String,
     pub short_id: String,
     pub author: String,
+    pub author_email: String,
     pub time: i64,
+    pub committer: String,
+    pub committer_email: String,
+    pub committer_time: i64,
     pub summary: String,
 }
 
@@ -176,15 +181,20 @@ impl GitRepo {
         for (_, oid) in revwalk.enumerate().take(count) {
             let oid = oid?;
             let commit = self.repo.find_commit(oid)?;
-            let time = commit.time().seconds();
-            let author = commit.author().name().unwrap_or("unknown").to_string();
+            let author = commit.author();
+            let committer = commit.committer();
+            let time = author.when().seconds();
             let summary = commit.summary().unwrap_or("").to_string();
 
             commits.push(CommitInfo {
                 id: oid.to_string(),
                 short_id: oid.to_string()[..7].to_string(),
-                author,
+                author: author.name().unwrap_or("unknown").to_string(),
+                author_email: author.email().unwrap_or("").to_string(),
                 time,
+                committer: committer.name().unwrap_or("unknown").to_string(),
+                committer_email: committer.email().unwrap_or("").to_string(),
+                committer_time: committer.when().seconds(),
                 summary,
             });
         }
@@ -286,6 +296,58 @@ impl GitRepo {
             .diff_tree_to_tree(parent_tree.as_ref(), Some(&tree), Some(&mut diff_opts))?;
 
         Self::diff_to_file_diffs(&diff)
+    }
+
+    pub fn get_commit_tags(&self) -> Result<HashMap<String, Vec<String>>> {
+        let mut result: HashMap<String, Vec<String>> = HashMap::new();
+        if let Ok(tag_names) = self.repo.tag_names(Some("")) {
+            for tag_name in tag_names.iter().flatten() {
+                let ref_name = format!("refs/tags/{}", tag_name);
+                if let Ok(reference) = self.repo.find_reference(&ref_name) {
+                    if let Ok(peeled) = reference.peel_to_commit() {
+                        let commit_id = peeled.id().to_string();
+                        result
+                            .entry(commit_id)
+                            .or_default()
+                            .push(tag_name.to_string());
+                    }
+                }
+            }
+        }
+        Ok(result)
+    }
+
+    pub fn get_commit_branches(&self) -> Result<HashMap<String, Vec<(String, bool)>>> {
+        let mut result: HashMap<String, Vec<(String, bool)>> = HashMap::new();
+        // local branches
+        if let Ok(branches) = self.repo.branches(Some(git2::BranchType::Local)) {
+            for branch in branches.flatten() {
+                if let Some(name) = branch.0.name().ok().flatten() {
+                    if let Some(commit) = branch.0.get().peel_to_commit().ok() {
+                        let commit_id = commit.id().to_string();
+                        result
+                            .entry(commit_id)
+                            .or_default()
+                            .push((name.to_string(), true));
+                    }
+                }
+            }
+        }
+        // remote branches
+        if let Ok(branches) = self.repo.branches(Some(git2::BranchType::Remote)) {
+            for branch in branches.flatten() {
+                if let Some(name) = branch.0.name().ok().flatten() {
+                    if let Some(commit) = branch.0.get().peel_to_commit().ok() {
+                        let commit_id = commit.id().to_string();
+                        result
+                            .entry(commit_id)
+                            .or_default()
+                            .push((name.to_string(), false));
+                    }
+                }
+            }
+        }
+        Ok(result)
     }
 
     fn diff_to_file_diffs(diff: &git2::Diff) -> Result<Vec<FileDiff>> {

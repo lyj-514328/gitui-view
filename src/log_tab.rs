@@ -1,16 +1,17 @@
 use crate::diff::DiffView;
-use crate::git::{CommitInfo, GitRepo};
+use crate::git::{CommitInfo, GitRepo, StatusType};
 use crate::theme::Theme;
 use chrono::{Local, TimeZone};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::Style,
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
     Frame,
 };
 use std::cell::Cell;
 use std::cmp;
+use std::collections::HashMap;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum LogDepth {
@@ -24,10 +25,12 @@ pub struct LogTab {
     pub commits: Vec<CommitInfo>,
     pub selected: usize,
     pub scroll: usize,
-    pub files: Vec<String>,
+    pub files: Vec<(String, StatusType)>,
     pub file_selected: usize,
     pub file_scroll: usize,
     pub depth: LogDepth,
+    pub tags_map: HashMap<String, Vec<String>>,
+    pub branches_map: HashMap<String, Vec<(String, bool)>>,
     commit_list_height: Cell<usize>,
     file_list_height: Cell<usize>,
 }
@@ -42,6 +45,8 @@ impl LogTab {
             file_selected: 0,
             file_scroll: 0,
             depth: LogDepth::Commits,
+            tags_map: HashMap::new(),
+            branches_map: HashMap::new(),
             commit_list_height: Cell::new(0),
             file_list_height: Cell::new(0),
         }
@@ -53,6 +58,8 @@ impl LogTab {
             self.selected = 0;
             self.scroll = 0;
         }
+        self.tags_map = repo.get_commit_tags().unwrap_or_default();
+        self.branches_map = repo.get_commit_branches().unwrap_or_default();
         self.files.clear();
         self.file_selected = 0;
         self.file_scroll = 0;
@@ -69,7 +76,7 @@ impl LogTab {
                     } else {
                         diff.old_path.clone()
                     };
-                    files.push(path);
+                    files.push((path, diff.status.clone()));
                 }
                 self.files = files;
                 self.file_selected = 0;
@@ -238,7 +245,7 @@ impl LogTab {
     }
 
     pub fn current_file_path(&self) -> Option<String> {
-        self.files.get(self.file_selected).cloned()
+        self.files.get(self.file_selected).map(|(path, _)| path.clone())
     }
 
     pub fn load_diff_for_file(&self, diff_view: &mut DiffView, repo: &GitRepo) {
@@ -298,8 +305,15 @@ impl LogTab {
         } else {
             theme.border_style()
         };
+        let total = self.commits.len();
+        let remaining = total.saturating_sub(self.selected);
+        let title = if total > 0 {
+            format!(" Log {}/{} ", remaining, total)
+        } else {
+            " Log ".to_string()
+        };
         let block = Block::default()
-            .title(" Log ")
+            .title(title)
             .borders(Borders::ALL)
             .border_style(border_style);
         let inner = block.inner(area);
@@ -310,28 +324,66 @@ impl LogTab {
 
         for (i, commit) in self.commits.iter().enumerate() {
             let is_selected = i == self.selected;
-            let marker = if is_selected { ">" } else { " " };
 
             let dt = Local
                 .timestamp_opt(commit.time, 0)
                 .latest()
-                .map(|t| t.format("%m-%d %H:%M").to_string())
+                .map(|t| t.format("%Y-%m-%d").to_string())
                 .unwrap_or_default();
 
             let hash_style = theme.commit_hash(is_selected);
             let msg_style = theme.commit_msg(is_selected);
-            let meta_style = theme.dim_text();
+            let date_style = if is_selected {
+                theme.selected()
+            } else {
+                Style::default().fg(theme.commit_date)
+            };
+            let author_style = if is_selected {
+                theme.selected()
+            } else {
+                Style::default().fg(theme.commit_author)
+            };
+            let tag_style = if is_selected {
+                theme.selected()
+            } else {
+                Style::default()
+                    .fg(Color::LightMagenta)
+                    .add_modifier(Modifier::BOLD)
+            };
+            let branch_style = if is_selected {
+                theme.selected()
+            } else {
+                Style::default().fg(Color::LightYellow)
+            };
 
-            let line = Line::from(vec![
-                Span::styled(format!("{} {} ", marker, commit.short_id), hash_style),
-                Span::styled(
-                    format!("{} ", truncate_str(&commit.summary, 50)),
-                    msg_style,
-                ),
-                Span::styled(format!("{} ", commit.author), meta_style),
-                Span::styled(dt, meta_style),
-            ]);
-            lines.push(line);
+            let mut spans: Vec<Span> = vec![
+                Span::styled(format!(" {} ", commit.short_id), hash_style),
+                Span::styled(format!(" {} ", dt), date_style),
+                Span::styled(format!(" {} ", commit.author), author_style),
+            ];
+
+            // tags
+            if let Some(tags) = self.tags_map.get(&commit.id) {
+                for tag in tags {
+                    spans.push(Span::styled(format!("<{}>", tag), tag_style));
+                }
+            }
+
+            // branches
+            if let Some(branches) = self.branches_map.get(&commit.id) {
+                for (name, is_local) in branches {
+                    if *is_local {
+                        spans.push(Span::styled(format!("{{{}}}", name), branch_style));
+                    } else {
+                        spans.push(Span::styled(format!("[{}]", name), branch_style));
+                    }
+                }
+            }
+
+            // message (extra spacing before message)
+            spans.push(Span::styled(format!("  {}", commit.summary), msg_style));
+
+            lines.push(Line::from(spans));
         }
 
         if lines.is_empty() {
@@ -352,41 +404,64 @@ impl LogTab {
 
     fn render_commit_info(&self, f: &mut Frame, area: Rect, theme: &Theme) {
         let block = Block::default()
-            .title(" Details ")
+            .title(" Info ")
             .borders(Borders::ALL)
             .border_style(theme.border_style());
         let inner = block.inner(area);
         f.render_widget(block, area);
 
         if let Some(commit) = self.commits.get(self.selected) {
-            let dt = Local
+            let label_style = theme.dim_text();
+            let value_style = Style::default();
+
+            let author_dt = Local
                 .timestamp_opt(commit.time, 0)
                 .latest()
                 .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string())
                 .unwrap_or_default();
 
-            let label_style = theme.dim_text();
-            let value_style = Style::default().fg(theme.commit_hash);
+            let committer_dt = Local
+                .timestamp_opt(commit.committer_time, 0)
+                .latest()
+                .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string())
+                .unwrap_or_default();
 
-            let lines = vec![
+            let mut lines = vec![
                 Line::from(vec![
                     Span::styled("Author: ", label_style),
-                    Span::styled(commit.author.clone(), value_style),
+                    Span::styled(
+                        format!("{} <{}>", commit.author, commit.author_email),
+                        value_style,
+                    ),
                 ]),
                 Line::from(vec![
                     Span::styled("Date:   ", label_style),
-                    Span::styled(dt, value_style),
+                    Span::styled(author_dt, value_style),
                 ]),
                 Line::from(vec![
-                    Span::styled("Hash:   ", label_style),
-                    Span::styled(commit.id.clone(), value_style),
+                    Span::styled("Committer: ", label_style),
+                    Span::styled(
+                        format!("{} <{}>", commit.committer, commit.committer_email),
+                        value_style,
+                    ),
                 ]),
-                Line::from(Span::styled("", theme.normal())),
-                Line::from(Span::styled(
-                    commit.summary.clone(),
-                    Style::default().fg(theme.commit_msg),
-                )),
+                Line::from(vec![
+                    Span::styled("Date:   ", label_style),
+                    Span::styled(committer_dt, value_style),
+                ]),
             ];
+
+            lines.push(Line::from(vec![
+                Span::styled("Sha:    ", label_style),
+                Span::styled(commit.id.clone(), value_style),
+            ]));
+
+            // blank line + summary
+            lines.push(Line::from(Span::styled("", theme.normal())));
+            lines.push(Line::from(Span::styled(
+                commit.summary.clone(),
+                Style::default().fg(theme.commit_msg),
+            )));
 
             f.render_widget(Paragraph::new(lines), inner);
         } else {
@@ -400,14 +475,48 @@ impl LogTab {
         }
     }
 
+    fn status_char(st: &StatusType) -> &'static str {
+        match st {
+            StatusType::Added => "+",
+            StatusType::Modified => "M",
+            StatusType::Deleted => "-",
+            StatusType::Renamed => "R",
+            StatusType::Copied => "C",
+            StatusType::Untracked => "?",
+            StatusType::TypeChange => "T",
+        }
+    }
+
+    fn file_style(st: &StatusType, selected: bool, theme: &Theme) -> Style {
+        if selected {
+            return theme.selected();
+        }
+        let fg = match st {
+            StatusType::Added => Color::LightGreen,
+            StatusType::Modified => Color::Yellow,
+            StatusType::Deleted => Color::LightRed,
+            StatusType::Renamed => Color::LightMagenta,
+            StatusType::Copied => Color::LightMagenta,
+            StatusType::Untracked => Color::DarkGray,
+            StatusType::TypeChange => Color::Yellow,
+        };
+        Style::default().fg(fg)
+    }
+
     fn render_file_list(&self, f: &mut Frame, area: Rect, theme: &Theme, focused: bool) {
         let border_style = if focused {
             theme.border_focused_style()
         } else {
             theme.border_style()
         };
+        let total = self.files.len();
+        let title = if total > 0 {
+            format!(" Files {}/{} ", self.file_selected + 1, total)
+        } else {
+            " Files ".to_string()
+        };
         let block = Block::default()
-            .title(" Files ")
+            .title(title)
             .borders(Borders::ALL)
             .border_style(border_style);
         let inner = block.inner(area);
@@ -416,17 +525,14 @@ impl LogTab {
 
         let mut lines: Vec<Line> = Vec::new();
 
-        for (i, file) in self.files.iter().enumerate() {
+        for (i, (path, status)) in self.files.iter().enumerate() {
             let is_selected = i == self.file_selected && focused;
             let marker = if is_selected { ">" } else { " " };
-            let style = if is_selected {
-                theme.selected()
-            } else {
-                Style::default().fg(theme.file_entry).bg(theme.light_bg)
-            };
+            let sc = Self::status_char(status);
+            let style = Self::file_style(status, is_selected, theme);
 
             lines.push(Line::from(Span::styled(
-                format!(" {} {}", marker, file),
+                format!(" {} {} {}", marker, sc, path),
                 style,
             )));
         }
@@ -448,10 +554,4 @@ impl LogTab {
     }
 }
 
-fn truncate_str(s: &str, max: usize) -> String {
-    if s.chars().count() <= max {
-        s.to_string()
-    } else {
-        format!("{}…", s.chars().take(max).collect::<String>())
-    }
-}
+
