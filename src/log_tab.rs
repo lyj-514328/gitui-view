@@ -9,6 +9,7 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
     Frame,
 };
+use std::cell::Cell;
 use std::cmp;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -27,6 +28,8 @@ pub struct LogTab {
     pub file_selected: usize,
     pub file_scroll: usize,
     pub depth: LogDepth,
+    commit_list_height: Cell<usize>,
+    file_list_height: Cell<usize>,
 }
 
 impl LogTab {
@@ -39,6 +42,8 @@ impl LogTab {
             file_selected: 0,
             file_scroll: 0,
             depth: LogDepth::Commits,
+            commit_list_height: Cell::new(0),
+            file_list_height: Cell::new(0),
         }
     }
 
@@ -117,10 +122,12 @@ impl LogTab {
             LogDepth::Commits | LogDepth::Details => {
                 let max = self.commits.len().saturating_sub(1);
                 self.selected = cmp::min(self.selected + 1, max);
+                self.ensure_commit_visible();
             }
             LogDepth::FilesDiff => {
                 let max = self.files.len().saturating_sub(1);
                 self.file_selected = cmp::min(self.file_selected + 1, max);
+                self.ensure_file_visible();
             }
             LogDepth::Diff => {}
         }
@@ -130,11 +137,37 @@ impl LogTab {
         match self.depth {
             LogDepth::Commits | LogDepth::Details => {
                 self.selected = self.selected.saturating_sub(1);
+                self.ensure_commit_visible();
             }
             LogDepth::FilesDiff => {
                 self.file_selected = self.file_selected.saturating_sub(1);
+                self.ensure_file_visible();
             }
             LogDepth::Diff => {}
+        }
+    }
+
+    fn ensure_commit_visible(&mut self) {
+        let height = self.commit_list_height.get();
+        if height == 0 {
+            return;
+        }
+        if self.selected < self.scroll {
+            self.scroll = self.selected;
+        } else if self.selected >= self.scroll + height {
+            self.scroll = self.selected + 1 - height;
+        }
+    }
+
+    fn ensure_file_visible(&mut self) {
+        let height = self.file_list_height.get();
+        if height == 0 {
+            return;
+        }
+        if self.file_selected < self.file_scroll {
+            self.file_scroll = self.file_selected;
+        } else if self.file_selected >= self.file_scroll + height {
+            self.file_scroll = self.file_selected + 1 - height;
         }
     }
 
@@ -209,6 +242,7 @@ impl LogTab {
             .border_style(border_style);
         let inner = block.inner(area);
         f.render_widget(block, area);
+        self.commit_list_height.set(inner.height as usize);
 
         let mut lines: Vec<Line> = Vec::new();
 
@@ -316,6 +350,7 @@ impl LogTab {
             .border_style(border_style);
         let inner = block.inner(area);
         f.render_widget(block, area);
+        self.file_list_height.set(inner.height as usize);
 
         let mut lines: Vec<Line> = Vec::new();
 
