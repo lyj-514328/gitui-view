@@ -1,7 +1,8 @@
 use crate::diff::DiffView;
-use crate::git::{CommitInfo, GitRepo, StatusType};
+use crate::git::{CommitId, CommitInfo, GitRepo, StatusType};
 use crate::theme::Theme;
 use chrono::{Local, TimeZone};
+use indexmap::IndexSet;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -13,6 +14,9 @@ use std::cell::Cell;
 use std::cmp;
 use std::collections::HashMap;
 
+const SLICE_SIZE: usize = 1200;
+const SLICE_OFFSET_RELOAD_THRESHOLD: usize = 100;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum LogDepth {
     Commits,
@@ -22,15 +26,21 @@ pub enum LogDepth {
 }
 
 pub struct LogTab {
-    pub commits: Vec<CommitInfo>,
+    /// All commit IDs (lightweight, stored once).
+    pub commit_ids: IndexSet<CommitId>,
+    /// Sliding window of full commit details (≈ SLICE_SIZE entries).
+    pub display_commits: Vec<CommitInfo>,
+    /// Index into commit_ids where display_commits starts.
+    pub display_offset: usize,
+    /// Current selection index into commit_ids.
     pub selected: usize,
-    pub scroll: usize,
     pub files: Vec<(String, StatusType)>,
     pub file_selected: usize,
     pub file_scroll: usize,
     pub depth: LogDepth,
     pub tags_map: HashMap<String, Vec<String>>,
     pub branches_map: HashMap<String, Vec<(String, bool)>>,
+    pub total_commits: usize,
     commit_list_height: Cell<usize>,
     file_list_height: Cell<usize>,
 }
@@ -38,25 +48,32 @@ pub struct LogTab {
 impl LogTab {
     pub fn new() -> Self {
         Self {
-            commits: Vec::new(),
+            commit_ids: IndexSet::new(),
+            display_commits: Vec::new(),
+            display_offset: 0,
             selected: 0,
-            scroll: 0,
             files: Vec::new(),
             file_selected: 0,
             file_scroll: 0,
             depth: LogDepth::Commits,
             tags_map: HashMap::new(),
             branches_map: HashMap::new(),
+            total_commits: 0,
             commit_list_height: Cell::new(0),
             file_list_height: Cell::new(0),
         }
     }
 
     pub fn refresh(&mut self, repo: &GitRepo) {
-        if let Ok(commits) = repo.get_commits(200) {
-            self.commits = commits;
+        self.total_commits = repo.count_all_commits().unwrap_or(0);
+        if let Ok(ids) = repo.get_all_commit_ids() {
+            self.commit_ids = ids.into_iter().collect();
             self.selected = 0;
-            self.scroll = 0;
+            self.fetch_commits(repo);
+        } else {
+            self.commit_ids.clear();
+            self.display_commits.clear();
+            self.display_offset = 0;
         }
         self.tags_map = repo.get_commit_tags().unwrap_or_default();
         self.branches_map = repo.get_commit_branches().unwrap_or_default();
@@ -64,6 +81,57 @@ impl LogTab {
         self.file_selected = 0;
         self.file_scroll = 0;
         self.depth = LogDepth::Commits;
+    }
+
+    /// Reload the sliding window of CommitInfo centered on selection.
+    fn fetch_commits(&mut self, repo: &GitRepo) {
+        let total = self.commit_ids.len();
+        if total == 0 {
+            self.display_commits.clear();
+            self.display_offset = 0;
+            return;
+        }
+        let half = SLICE_SIZE / 2;
+        let want_min = if self.selected > half {
+            self.selected - half
+        } else {
+            0
+        };
+        let want_min = want_min.min(total.saturating_sub(SLICE_SIZE));
+        let want_count = SLICE_SIZE.min(total - want_min);
+
+        let ids: Vec<CommitId> = self
+            .commit_ids
+            .iter()
+            .skip(want_min)
+            .take(want_count)
+            .copied()
+            .collect();
+
+        if let Ok(infos) = repo.get_commits_info(&ids) {
+            self.display_commits = infos;
+            self.display_offset = want_min;
+        }
+    }
+
+    /// Check whether the sliding window needs to be recentered.
+    fn needs_data(&self) -> bool {
+        if self.commit_ids.is_empty() {
+            return false;
+        }
+        if self.display_commits.is_empty() {
+            return true;
+        }
+        let end = self.display_offset + self.display_commits.len();
+        let thr = SLICE_OFFSET_RELOAD_THRESHOLD;
+        self.selected < self.display_offset + thr
+            || self.selected >= end.saturating_sub(thr)
+    }
+
+    fn ensure_data(&mut self, repo: &GitRepo) {
+        if self.needs_data() {
+            self.fetch_commits(repo);
+        }
     }
 
     pub fn load_files(&mut self, repo: &GitRepo) {
@@ -88,7 +156,7 @@ impl LogTab {
     pub fn enter(&mut self) -> bool {
         match self.depth {
             LogDepth::Commits => {
-                if !self.commits.is_empty() {
+                if !self.commit_ids.is_empty() {
                     self.depth = LogDepth::Details;
                     true
                 } else {
@@ -124,12 +192,12 @@ impl LogTab {
         };
     }
 
-    pub fn move_down(&mut self) {
+    pub fn move_down(&mut self, repo: &GitRepo) {
         match self.depth {
             LogDepth::Commits | LogDepth::Details => {
-                let max = self.commits.len().saturating_sub(1);
+                let max = self.commit_ids.len().saturating_sub(1);
                 self.selected = cmp::min(self.selected + 1, max);
-                self.ensure_commit_visible();
+                self.ensure_data(repo);
             }
             LogDepth::FilesDiff => {
                 let max = self.files.len().saturating_sub(1);
@@ -140,11 +208,11 @@ impl LogTab {
         }
     }
 
-    pub fn move_up(&mut self) {
+    pub fn move_up(&mut self, repo: &GitRepo) {
         match self.depth {
             LogDepth::Commits | LogDepth::Details => {
                 self.selected = self.selected.saturating_sub(1);
-                self.ensure_commit_visible();
+                self.ensure_data(repo);
             }
             LogDepth::FilesDiff => {
                 self.file_selected = self.file_selected.saturating_sub(1);
@@ -154,15 +222,20 @@ impl LogTab {
         }
     }
 
-    fn ensure_commit_visible(&mut self) {
+    fn calc_scroll_top(&self) -> usize {
         let height = self.commit_list_height.get();
-        if height == 0 {
-            return;
+        if height == 0 || self.display_commits.is_empty() {
+            return 0;
         }
-        if self.selected < self.scroll {
-            self.scroll = self.selected;
-        } else if self.selected >= self.scroll + height {
-            self.scroll = self.selected + 1 - height;
+        let local_sel = self
+            .selected
+            .saturating_sub(self.display_offset)
+            .min(self.display_commits.len().saturating_sub(1));
+
+        if local_sel >= height {
+            local_sel - height + 1
+        } else {
+            0
         }
     }
 
@@ -178,13 +251,13 @@ impl LogTab {
         }
     }
 
-    pub fn page_down(&mut self) {
+    pub fn page_down(&mut self, repo: &GitRepo) {
         match self.depth {
             LogDepth::Commits | LogDepth::Details => {
                 let page = self.commit_list_height.get().max(1);
-                let max = self.commits.len().saturating_sub(1);
+                let max = self.commit_ids.len().saturating_sub(1);
                 self.selected = cmp::min(self.selected + page, max);
-                self.ensure_commit_visible();
+                self.ensure_data(repo);
             }
             LogDepth::FilesDiff => {
                 let page = self.file_list_height.get().max(1);
@@ -196,12 +269,12 @@ impl LogTab {
         }
     }
 
-    pub fn page_up(&mut self) {
+    pub fn page_up(&mut self, repo: &GitRepo) {
         match self.depth {
             LogDepth::Commits | LogDepth::Details => {
                 let page = self.commit_list_height.get().max(1);
                 self.selected = self.selected.saturating_sub(page);
-                self.ensure_commit_visible();
+                self.ensure_data(repo);
             }
             LogDepth::FilesDiff => {
                 let page = self.file_list_height.get().max(1);
@@ -212,11 +285,11 @@ impl LogTab {
         }
     }
 
-    pub fn go_home(&mut self) {
+    pub fn go_home(&mut self, repo: &GitRepo) {
         match self.depth {
             LogDepth::Commits | LogDepth::Details => {
                 self.selected = 0;
-                self.ensure_commit_visible();
+                self.ensure_data(repo);
             }
             LogDepth::FilesDiff => {
                 self.file_selected = 0;
@@ -226,11 +299,11 @@ impl LogTab {
         }
     }
 
-    pub fn go_end(&mut self) {
+    pub fn go_end(&mut self, repo: &GitRepo) {
         match self.depth {
             LogDepth::Commits | LogDepth::Details => {
-                self.selected = self.commits.len().saturating_sub(1);
-                self.ensure_commit_visible();
+                self.selected = self.commit_ids.len().saturating_sub(1);
+                self.ensure_data(repo);
             }
             LogDepth::FilesDiff => {
                 self.file_selected = self.files.len().saturating_sub(1);
@@ -241,7 +314,9 @@ impl LogTab {
     }
 
     pub fn current_commit_id(&self) -> Option<String> {
-        self.commits.get(self.selected).map(|c| c.id.clone())
+        self.commit_ids
+            .get_index(self.selected)
+            .map(|cid| cid.0.to_string())
     }
 
     pub fn current_file_path(&self) -> Option<String> {
@@ -305,7 +380,7 @@ impl LogTab {
         } else {
             theme.border_style()
         };
-        let total = self.commits.len();
+        let total = self.total_commits;
         let remaining = total.saturating_sub(self.selected);
         let title = if total > 0 {
             format!(" Log {}/{} ", remaining, total)
@@ -322,8 +397,9 @@ impl LogTab {
 
         let mut lines: Vec<Line> = Vec::new();
 
-        for (i, commit) in self.commits.iter().enumerate() {
-            let is_selected = i == self.selected;
+        for (i, commit) in self.display_commits.iter().enumerate() {
+            let global_idx = self.display_offset + i;
+            let is_selected = global_idx == self.selected;
 
             let dt = Local
                 .timestamp_opt(commit.time, 0)
@@ -393,9 +469,10 @@ impl LogTab {
             )));
         }
 
+        let scroll_top = self.calc_scroll_top();
         let visible: Vec<Line> = lines
             .into_iter()
-            .skip(self.scroll)
+            .skip(scroll_top)
             .take(inner.height as usize)
             .collect();
 
@@ -410,7 +487,10 @@ impl LogTab {
         let inner = block.inner(area);
         f.render_widget(block, area);
 
-        if let Some(commit) = self.commits.get(self.selected) {
+        let display_idx = self.selected.checked_sub(self.display_offset);
+        let commit = display_idx.and_then(|i| self.display_commits.get(i));
+
+        if let Some(commit) = commit {
             let label_style = theme.dim_text();
             let value_style = Style::default();
 
@@ -553,5 +633,3 @@ impl LogTab {
         f.render_widget(Paragraph::new(visible), inner);
     }
 }
-
-

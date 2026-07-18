@@ -543,6 +543,7 @@ dependencies = [
  "chrono",
  "crossterm",
  "git2",
+ "indexmap",
  "lazy_static",
  "ratatui",
  "regex",

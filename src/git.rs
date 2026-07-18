@@ -22,6 +22,9 @@ pub enum StatusType {
     TypeChange,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct CommitId(pub git2::Oid);
+
 #[derive(Clone, Debug)]
 pub struct CommitInfo {
     pub id: String,
@@ -173,23 +176,38 @@ impl GitRepo {
         Ok((staged, unstaged))
     }
 
-    pub fn get_commits(&self, count: usize) -> Result<Vec<CommitInfo>> {
+    /// Count total commits reachable from HEAD.
+    pub fn count_all_commits(&self) -> Result<usize> {
         let mut revwalk = self.repo.revwalk().context("Failed to create revwalk")?;
         revwalk.set_sorting(Sort::TIME)?;
         revwalk.push_head()?;
+        Ok(revwalk.count())
+    }
 
-        let mut commits = Vec::new();
-        for (_, oid) in revwalk.enumerate().take(count) {
-            let oid = oid?;
-            let commit = self.repo.find_commit(oid)?;
+    /// Return all commit IDs from revwalk (lightweight, only OIDs).
+    pub fn get_all_commit_ids(&self) -> Result<Vec<CommitId>> {
+        let mut revwalk = self.repo.revwalk().context("Failed to create revwalk")?;
+        revwalk.set_sorting(Sort::TIME)?;
+        revwalk.push_head()?;
+        let mut ids = Vec::new();
+        for oid in revwalk {
+            ids.push(CommitId(oid?));
+        }
+        Ok(ids)
+    }
+
+    /// Batch-load full CommitInfo for the given CommitIds.
+    pub fn get_commits_info(&self, ids: &[CommitId]) -> Result<Vec<CommitInfo>> {
+        let mut commits = Vec::with_capacity(ids.len());
+        for cid in ids {
+            let commit = self.repo.find_commit(cid.0)?;
             let author = commit.author();
             let committer = commit.committer();
             let time = author.when().seconds();
             let summary = commit.summary().unwrap_or("").to_string();
-
             commits.push(CommitInfo {
-                id: oid.to_string(),
-                short_id: oid.to_string()[..7].to_string(),
+                id: cid.0.to_string(),
+                short_id: cid.0.to_string()[..7].to_string(),
                 author: author.name().unwrap_or("unknown").to_string(),
                 author_email: author.email().unwrap_or("").to_string(),
                 time,
@@ -199,7 +217,6 @@ impl GitRepo {
                 summary,
             });
         }
-
         Ok(commits)
     }
 

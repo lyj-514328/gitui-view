@@ -168,7 +168,7 @@ impl App {
                     self.load_diff_for_selection();
                 }
                 Tab::Log => {
-                    self.log_tab.move_down();
+                    self.log_tab.move_down(&self.repo);
                     if self.log_tab.depth == log_tab::LogDepth::Details {
                         self.log_tab.load_files(&self.repo);
                     }
@@ -205,7 +205,7 @@ impl App {
                     self.load_diff_for_selection();
                 }
                 Tab::Log => {
-                    self.log_tab.move_up();
+                    self.log_tab.move_up(&self.repo);
                     if self.log_tab.depth == log_tab::LogDepth::Details {
                         self.log_tab.load_files(&self.repo);
                     }
@@ -239,7 +239,7 @@ impl App {
             match self.current_tab {
                 Tab::Status => {}
                 Tab::Log => {
-                    self.log_tab.page_down();
+                    self.log_tab.page_down(&self.repo);
                     if self.log_tab.depth == log_tab::LogDepth::Details {
                         self.log_tab.load_files(&self.repo);
                     }
@@ -273,7 +273,7 @@ impl App {
             match self.current_tab {
                 Tab::Status => {}
                 Tab::Log => {
-                    self.log_tab.page_up();
+                    self.log_tab.page_up(&self.repo);
                     if self.log_tab.depth == log_tab::LogDepth::Details {
                         self.log_tab.load_files(&self.repo);
                     }
@@ -307,7 +307,7 @@ impl App {
             match self.current_tab {
                 Tab::Status => {}
                 Tab::Log => {
-                    self.log_tab.go_home();
+                    self.log_tab.go_home(&self.repo);
                     if self.log_tab.depth == log_tab::LogDepth::Details {
                         self.log_tab.load_files(&self.repo);
                     }
@@ -341,7 +341,7 @@ impl App {
             match self.current_tab {
                 Tab::Status => {}
                 Tab::Log => {
-                    self.log_tab.go_end();
+                    self.log_tab.go_end(&self.repo);
                     if self.log_tab.depth == log_tab::LogDepth::Details {
                         self.log_tab.load_files(&self.repo);
                     }

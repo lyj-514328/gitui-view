@@ -9,8 +9,10 @@ use ratatui::{
     Frame,
 };
 use std::cell::Cell;
+use std::cell::RefCell;
 use std::cmp;
 use std::path::Path;
+use std::time::Instant;
 use unicode_width::UnicodeWidthStr;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -27,6 +29,8 @@ pub struct DiffView {
     pub focused: Cell<bool>,
     visible_height: Cell<usize>,
     total_rendered_lines: Cell<usize>,
+    last_scroll_time: RefCell<Instant>,
+    scroll_speed: Cell<f32>,
 }
 
 impl DiffView {
@@ -39,6 +43,8 @@ impl DiffView {
             focused: Cell::new(false),
             visible_height: Cell::new(0),
             total_rendered_lines: Cell::new(0),
+            last_scroll_time: RefCell::new(Instant::now()),
+            scroll_speed: Cell::new(0.0),
         }
     }
 
@@ -54,16 +60,39 @@ impl DiffView {
         self.selected_line = 0;
     }
 
-    pub fn scroll_down(&mut self, amount: usize) {
+    fn update_scroll_speed(&self) {
+        const REPEATED_SCROLL_THRESHOLD_MILLIS: u128 = 300;
+        const SCROLL_SPEED_START: f32 = 0.1;
+        const SCROLL_SPEED_MAX: f32 = 10.0;
+        const SCROLL_SPEED_MULTIPLIER: f32 = 1.05;
+
+        let now = Instant::now();
+        let since_last = now.duration_since(*self.last_scroll_time.borrow());
+        *self.last_scroll_time.borrow_mut() = now;
+
+        let speed = if since_last.as_millis() < REPEATED_SCROLL_THRESHOLD_MILLIS {
+            self.scroll_speed.get() * SCROLL_SPEED_MULTIPLIER
+        } else {
+            SCROLL_SPEED_START
+        };
+
+        self.scroll_speed.set(speed.min(SCROLL_SPEED_MAX));
+    }
+
+    pub fn scroll_down(&mut self, _amount: usize) {
+        self.update_scroll_speed();
+        let step = (self.scroll_speed.get() as usize).max(1);
         let max = self
             .total_rendered_lines
             .get()
             .saturating_sub(self.visible_height.get().max(1));
-        self.scroll = cmp::min(self.scroll + amount, max);
+        self.scroll = cmp::min(self.scroll + step, max);
     }
 
-    pub fn scroll_up(&mut self, amount: usize) {
-        self.scroll = self.scroll.saturating_sub(amount);
+    pub fn scroll_up(&mut self, _amount: usize) {
+        self.update_scroll_speed();
+        let step = (self.scroll_speed.get() as usize).max(1);
+        self.scroll = self.scroll.saturating_sub(step);
     }
 
     pub fn page_down(&mut self) {
