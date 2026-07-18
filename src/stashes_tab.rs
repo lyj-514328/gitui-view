@@ -171,6 +171,40 @@ impl StashesTab {
         }
     }
 
+    pub fn page_down(&mut self) {
+        match self.depth {
+            StashDepth::List | StashDepth::Details => {
+                let page = self.stash_list_height.get().max(1);
+                let max = self.stashes.len().saturating_sub(1);
+                self.selected = cmp::min(self.selected + page, max);
+                self.ensure_stash_visible();
+            }
+            StashDepth::FilesDiff => {
+                let page = self.file_list_height.get().max(1);
+                let max = self.files.len().saturating_sub(1);
+                self.file_selected = cmp::min(self.file_selected + page, max);
+                self.ensure_file_visible();
+            }
+            StashDepth::Diff => {}
+        }
+    }
+
+    pub fn page_up(&mut self) {
+        match self.depth {
+            StashDepth::List | StashDepth::Details => {
+                let page = self.stash_list_height.get().max(1);
+                self.selected = self.selected.saturating_sub(page);
+                self.ensure_stash_visible();
+            }
+            StashDepth::FilesDiff => {
+                let page = self.file_list_height.get().max(1);
+                self.file_selected = self.file_selected.saturating_sub(page);
+                self.ensure_file_visible();
+            }
+            StashDepth::Diff => {}
+        }
+    }
+
     pub fn current_stash_index(&self) -> Option<usize> {
         self.stashes.get(self.selected).map(|s| s.index)
     }

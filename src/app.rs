@@ -226,6 +226,74 @@ impl App {
         }
     }
 
+    pub fn page_down(&mut self) {
+        if self.show_diff {
+            self.diff_view.page_down();
+        } else if self.current_tab == Tab::Status && self.status_tab.focus == StatusFocus::Diff {
+            self.diff_view.page_down();
+        } else if self.current_tab == Tab::Log && self.log_tab.depth == log_tab::LogDepth::Diff {
+            self.diff_view.page_down();
+        } else if self.current_tab == Tab::Stashes && self.stashes_tab.depth == stashes_tab::StashDepth::Diff {
+            self.diff_view.page_down();
+        } else {
+            match self.current_tab {
+                Tab::Status => {}
+                Tab::Log => {
+                    self.log_tab.page_down();
+                    if self.log_tab.depth == log_tab::LogDepth::Details {
+                        self.log_tab.load_files(&self.repo);
+                    }
+                    if self.log_tab.depth == log_tab::LogDepth::FilesDiff {
+                        self.log_tab.load_diff_for_file(&mut self.diff_view, &self.repo);
+                    }
+                }
+                Tab::Stashes => {
+                    self.stashes_tab.page_down();
+                    if self.stashes_tab.depth == stashes_tab::StashDepth::Details {
+                        self.stashes_tab.load_files(&mut self.repo);
+                    }
+                    if self.stashes_tab.depth == stashes_tab::StashDepth::FilesDiff {
+                        self.stashes_tab.load_diff_for_file(&mut self.diff_view, &mut self.repo);
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn page_up(&mut self) {
+        if self.show_diff {
+            self.diff_view.page_up();
+        } else if self.current_tab == Tab::Status && self.status_tab.focus == StatusFocus::Diff {
+            self.diff_view.page_up();
+        } else if self.current_tab == Tab::Log && self.log_tab.depth == log_tab::LogDepth::Diff {
+            self.diff_view.page_up();
+        } else if self.current_tab == Tab::Stashes && self.stashes_tab.depth == stashes_tab::StashDepth::Diff {
+            self.diff_view.page_up();
+        } else {
+            match self.current_tab {
+                Tab::Status => {}
+                Tab::Log => {
+                    self.log_tab.page_up();
+                    if self.log_tab.depth == log_tab::LogDepth::Details {
+                        self.log_tab.load_files(&self.repo);
+                    }
+                    if self.log_tab.depth == log_tab::LogDepth::FilesDiff {
+                        self.log_tab.load_diff_for_file(&mut self.diff_view, &self.repo);
+                    }
+                }
+                Tab::Stashes => {
+                    self.stashes_tab.page_up();
+                    if self.stashes_tab.depth == stashes_tab::StashDepth::Details {
+                        self.stashes_tab.load_files(&mut self.repo);
+                    }
+                    if self.stashes_tab.depth == stashes_tab::StashDepth::FilesDiff {
+                        self.stashes_tab.load_diff_for_file(&mut self.diff_view, &mut self.repo);
+                    }
+                }
+            }
+        }
+    }
+
     pub fn load_diff_for_selection(&mut self) {
         match self.current_tab {
             Tab::Status => {
@@ -383,7 +451,7 @@ impl App {
                     },
                 )
             } else {
-                " q:quit | h:help | \u{2191}\u{2193}:navigate | \u{2190}\u{2192}:switch panel | Enter:open diff | 1-3:goto tab ".to_string()
+                " q:quit | h:help | \u{2191}\u{2193}:navigate | PgUp/PgDn:page | \u{2190}\u{2192}:switch panel | Enter:open diff | 1-3:goto tab ".to_string()
             }
         } else if self.is_any_diff_active() {
             format!(
@@ -399,7 +467,7 @@ impl App {
                 },
             )
         } else {
-            " q:quit | h:help | d:show diff | \u{2191}\u{2193}:navigate | Tab:next | 1-3:goto tab ".to_string()
+            " q:quit | h:help | d:show diff | ↑↓:navigate | PgUp/PgDn:page | Tab:next | 1-3:goto tab ".to_string()
         };
 
         let status_line = Line::from(Span::styled(mode_text, self.theme.dim_text()));
@@ -463,9 +531,9 @@ impl App {
         let area = f.area();
         let help_area = Rect {
             x: area.width.saturating_sub(50) / 2,
-            y: area.height.saturating_sub(18) / 2,
+            y: area.height.saturating_sub(19) / 2,
             width: 50.min(area.width),
-            height: 18.min(area.height),
+            height: 19.min(area.height),
         };
 
         let help_lines = vec![
@@ -488,8 +556,12 @@ impl App {
                 Span::styled("Go to tab by number", self.theme.help_desc()),
             ]),
             Line::from(vec![
-                Span::styled("  \u{2191}/\u{2193}        ", self.theme.help_key()),
+                Span::styled("  ↑/↓        ", self.theme.help_key()),
                 Span::styled("Navigate / scroll", self.theme.help_desc()),
+            ]),
+            Line::from(vec![
+                Span::styled("  PgUp/PgDn  ", self.theme.help_key()),
+                Span::styled("Page up / page down", self.theme.help_desc()),
             ]),
             Line::from(vec![
                 Span::styled("  d          ", self.theme.help_key()),

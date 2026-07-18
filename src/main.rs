@@ -163,14 +163,10 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
                     app.move_down();
                 }
                 KeyCode::PageUp => {
-                    if app.is_any_diff_active() {
-                        app.diff_view.page_up();
-                    }
+                    app.page_up();
                 }
                 KeyCode::PageDown => {
-                    if app.is_any_diff_active() {
-                        app.diff_view.page_down();
-                    }
+                    app.page_down();
                 }
                 KeyCode::Home => {
                     if app.is_any_diff_active() {
