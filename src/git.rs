@@ -41,6 +41,7 @@ pub struct StashInfo {
     pub message: String,
     pub commit_id: String,
     pub time: i64,
+    pub author: String,
 }
 
 #[derive(Clone, Debug)]
@@ -253,6 +254,7 @@ impl GitRepo {
                 message: message.to_string(),
                 commit_id: oid.to_string(),
                 time: 0,
+                author: String::new(),
             });
             true
         })?;
@@ -262,6 +264,7 @@ impl GitRepo {
                 git2::Oid::from_str(&stash.commit_id).unwrap(),
             ) {
                 stash.time = commit.time().seconds();
+                stash.author = commit.author().name().unwrap_or("unknown").to_string();
             }
         }
 

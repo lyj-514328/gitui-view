@@ -1,10 +1,10 @@
 use crate::diff::DiffView;
-use crate::git::{GitRepo, StashInfo};
+use crate::git::{GitRepo, StashInfo, StatusType};
 use crate::theme::Theme;
 use chrono::{Local, TimeZone};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::Style,
+    style::{Color, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
     Frame,
@@ -24,7 +24,7 @@ pub struct StashesTab {
     pub stashes: Vec<StashInfo>,
     pub selected: usize,
     pub scroll: usize,
-    pub files: Vec<String>,
+    pub files: Vec<(String, StatusType)>,
     pub file_selected: usize,
     pub file_scroll: usize,
     pub depth: StashDepth,
@@ -69,7 +69,7 @@ impl StashesTab {
                     } else {
                         diff.old_path.clone()
                     };
-                    files.push(path);
+                    files.push((path, diff.status.clone()));
                 }
                 self.files = files;
                 self.file_selected = 0;
@@ -238,7 +238,7 @@ impl StashesTab {
     }
 
     pub fn current_file_path(&self) -> Option<String> {
-        self.files.get(self.file_selected).cloned()
+        self.files.get(self.file_selected).map(|(path, _)| path.clone())
     }
 
     pub fn load_diff_for_file(&self, diff_view: &mut DiffView, repo: &mut GitRepo) {
@@ -298,8 +298,15 @@ impl StashesTab {
         } else {
             theme.border_style()
         };
+        let total = self.stashes.len();
+        let remaining = total.saturating_sub(self.selected);
+        let title = if total > 0 {
+            format!(" Stashes {}/{} ", remaining, total)
+        } else {
+            " Stashes ".to_string()
+        };
         let block = Block::default()
-            .title(" Stashes ")
+            .title(title)
             .borders(Borders::ALL)
             .border_style(border_style);
         let inner = block.inner(area);
@@ -310,27 +317,34 @@ impl StashesTab {
 
         for (i, stash) in self.stashes.iter().enumerate() {
             let is_selected = i == self.selected;
-            let marker = if is_selected { ">" } else { " " };
 
             let dt = Local
                 .timestamp_opt(stash.time, 0)
                 .latest()
-                .map(|t| t.format("%m-%d %H:%M").to_string())
+                .map(|t| t.format("%Y-%m-%d").to_string())
                 .unwrap_or_default();
 
-            let msg_style = theme.stash_msg(is_selected);
-            let meta_style = theme.dim_text();
+            let number_style = theme.stash_msg(is_selected);
+            let date_style = if is_selected {
+                theme.selected()
+            } else {
+                Style::default().fg(theme.commit_date)
+            };
+            let author_style = if is_selected {
+                theme.selected()
+            } else {
+                Style::default().fg(theme.commit_author)
+            };
+            let msg_style = theme.commit_msg(is_selected);
 
             lines.push(Line::from(vec![
                 Span::styled(
-                    format!("{} stash@{{{}}} ", marker, stash.index),
-                    msg_style,
+                    format!(" stash@{{{}}} ", stash.index),
+                    number_style,
                 ),
-                Span::styled(
-                    format!("{} ", truncate_str(&stash.message, 50)),
-                    msg_style,
-                ),
-                Span::styled(dt, meta_style),
+                Span::styled(format!(" {} ", dt), date_style),
+                Span::styled(format!(" {} ", stash.author), author_style),
+                Span::styled(format!("  {}", stash.message), msg_style),
             ]));
         }
 
@@ -352,7 +366,7 @@ impl StashesTab {
 
     fn render_stash_info(&self, f: &mut Frame, area: Rect, theme: &Theme) {
         let block = Block::default()
-            .title(" Details ")
+            .title(" Info ")
             .borders(Borders::ALL)
             .border_style(theme.border_style());
         let inner = block.inner(area);
@@ -400,14 +414,48 @@ impl StashesTab {
         }
     }
 
+    fn status_char(st: &StatusType) -> &'static str {
+        match st {
+            StatusType::Added => "+",
+            StatusType::Modified => "M",
+            StatusType::Deleted => "-",
+            StatusType::Renamed => "R",
+            StatusType::Copied => "C",
+            StatusType::Untracked => "?",
+            StatusType::TypeChange => "T",
+        }
+    }
+
+    fn file_style(st: &StatusType, selected: bool, theme: &Theme) -> Style {
+        if selected {
+            return theme.selected();
+        }
+        let fg = match st {
+            StatusType::Added => Color::LightGreen,
+            StatusType::Modified => Color::Yellow,
+            StatusType::Deleted => Color::LightRed,
+            StatusType::Renamed => Color::LightMagenta,
+            StatusType::Copied => Color::LightMagenta,
+            StatusType::Untracked => Color::DarkGray,
+            StatusType::TypeChange => Color::Yellow,
+        };
+        Style::default().fg(fg)
+    }
+
     fn render_file_list(&self, f: &mut Frame, area: Rect, theme: &Theme, focused: bool) {
         let border_style = if focused {
             theme.border_focused_style()
         } else {
             theme.border_style()
         };
+        let total = self.files.len();
+        let title = if total > 0 {
+            format!(" Files {}/{} ", self.file_selected + 1, total)
+        } else {
+            " Files ".to_string()
+        };
         let block = Block::default()
-            .title(" Files ")
+            .title(title)
             .borders(Borders::ALL)
             .border_style(border_style);
         let inner = block.inner(area);
@@ -416,17 +464,14 @@ impl StashesTab {
 
         let mut lines: Vec<Line> = Vec::new();
 
-        for (i, file) in self.files.iter().enumerate() {
+        for (i, (path, status)) in self.files.iter().enumerate() {
             let is_selected = i == self.file_selected && focused;
             let marker = if is_selected { ">" } else { " " };
-            let style = if is_selected {
-                theme.selected()
-            } else {
-                Style::default().fg(theme.file_entry).bg(theme.light_bg)
-            };
+            let sc = Self::status_char(status);
+            let style = Self::file_style(status, is_selected, theme);
 
             lines.push(Line::from(Span::styled(
-                format!(" {} {}", marker, file),
+                format!(" {} {} {}", marker, sc, path),
                 style,
             )));
         }
@@ -445,13 +490,5 @@ impl StashesTab {
             .collect();
 
         f.render_widget(Paragraph::new(visible), inner);
-    }
-}
-
-fn truncate_str(s: &str, max: usize) -> String {
-    if s.chars().count() <= max {
-        s.to_string()
-    } else {
-        format!("{}…", s.chars().take(max).collect::<String>())
     }
 }
