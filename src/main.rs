@@ -169,14 +169,10 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
                     app.page_down();
                 }
                 KeyCode::Home => {
-                    if app.is_any_diff_active() {
-                        app.diff_view.go_to_top();
-                    }
+                    app.go_home();
                 }
                 KeyCode::End => {
-                    if app.is_any_diff_active() {
-                        app.diff_view.go_to_end();
-                    }
+                    app.go_end();
                 }
                 KeyCode::Tab => {
                     app.next_tab();

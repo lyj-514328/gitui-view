@@ -205,6 +205,34 @@ impl StashesTab {
         }
     }
 
+    pub fn go_home(&mut self) {
+        match self.depth {
+            StashDepth::List | StashDepth::Details => {
+                self.selected = 0;
+                self.ensure_stash_visible();
+            }
+            StashDepth::FilesDiff => {
+                self.file_selected = 0;
+                self.ensure_file_visible();
+            }
+            StashDepth::Diff => {}
+        }
+    }
+
+    pub fn go_end(&mut self) {
+        match self.depth {
+            StashDepth::List | StashDepth::Details => {
+                self.selected = self.stashes.len().saturating_sub(1);
+                self.ensure_stash_visible();
+            }
+            StashDepth::FilesDiff => {
+                self.file_selected = self.files.len().saturating_sub(1);
+                self.ensure_file_visible();
+            }
+            StashDepth::Diff => {}
+        }
+    }
+
     pub fn current_stash_index(&self) -> Option<usize> {
         self.stashes.get(self.selected).map(|s| s.index)
     }

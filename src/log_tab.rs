@@ -205,6 +205,34 @@ impl LogTab {
         }
     }
 
+    pub fn go_home(&mut self) {
+        match self.depth {
+            LogDepth::Commits | LogDepth::Details => {
+                self.selected = 0;
+                self.ensure_commit_visible();
+            }
+            LogDepth::FilesDiff => {
+                self.file_selected = 0;
+                self.ensure_file_visible();
+            }
+            LogDepth::Diff => {}
+        }
+    }
+
+    pub fn go_end(&mut self) {
+        match self.depth {
+            LogDepth::Commits | LogDepth::Details => {
+                self.selected = self.commits.len().saturating_sub(1);
+                self.ensure_commit_visible();
+            }
+            LogDepth::FilesDiff => {
+                self.file_selected = self.files.len().saturating_sub(1);
+                self.ensure_file_visible();
+            }
+            LogDepth::Diff => {}
+        }
+    }
+
     pub fn current_commit_id(&self) -> Option<String> {
         self.commits.get(self.selected).map(|c| c.id.clone())
     }

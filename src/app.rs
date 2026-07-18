@@ -294,6 +294,74 @@ impl App {
         }
     }
 
+    pub fn go_home(&mut self) {
+        if self.show_diff {
+            self.diff_view.go_to_top();
+        } else if self.current_tab == Tab::Status && self.status_tab.focus == StatusFocus::Diff {
+            self.diff_view.go_to_top();
+        } else if self.current_tab == Tab::Log && self.log_tab.depth == log_tab::LogDepth::Diff {
+            self.diff_view.go_to_top();
+        } else if self.current_tab == Tab::Stashes && self.stashes_tab.depth == stashes_tab::StashDepth::Diff {
+            self.diff_view.go_to_top();
+        } else {
+            match self.current_tab {
+                Tab::Status => {}
+                Tab::Log => {
+                    self.log_tab.go_home();
+                    if self.log_tab.depth == log_tab::LogDepth::Details {
+                        self.log_tab.load_files(&self.repo);
+                    }
+                    if self.log_tab.depth == log_tab::LogDepth::FilesDiff {
+                        self.log_tab.load_diff_for_file(&mut self.diff_view, &self.repo);
+                    }
+                }
+                Tab::Stashes => {
+                    self.stashes_tab.go_home();
+                    if self.stashes_tab.depth == stashes_tab::StashDepth::Details {
+                        self.stashes_tab.load_files(&mut self.repo);
+                    }
+                    if self.stashes_tab.depth == stashes_tab::StashDepth::FilesDiff {
+                        self.stashes_tab.load_diff_for_file(&mut self.diff_view, &mut self.repo);
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn go_end(&mut self) {
+        if self.show_diff {
+            self.diff_view.go_to_end();
+        } else if self.current_tab == Tab::Status && self.status_tab.focus == StatusFocus::Diff {
+            self.diff_view.go_to_end();
+        } else if self.current_tab == Tab::Log && self.log_tab.depth == log_tab::LogDepth::Diff {
+            self.diff_view.go_to_end();
+        } else if self.current_tab == Tab::Stashes && self.stashes_tab.depth == stashes_tab::StashDepth::Diff {
+            self.diff_view.go_to_end();
+        } else {
+            match self.current_tab {
+                Tab::Status => {}
+                Tab::Log => {
+                    self.log_tab.go_end();
+                    if self.log_tab.depth == log_tab::LogDepth::Details {
+                        self.log_tab.load_files(&self.repo);
+                    }
+                    if self.log_tab.depth == log_tab::LogDepth::FilesDiff {
+                        self.log_tab.load_diff_for_file(&mut self.diff_view, &self.repo);
+                    }
+                }
+                Tab::Stashes => {
+                    self.stashes_tab.go_end();
+                    if self.stashes_tab.depth == stashes_tab::StashDepth::Details {
+                        self.stashes_tab.load_files(&mut self.repo);
+                    }
+                    if self.stashes_tab.depth == stashes_tab::StashDepth::FilesDiff {
+                        self.stashes_tab.load_diff_for_file(&mut self.diff_view, &mut self.repo);
+                    }
+                }
+            }
+        }
+    }
+
     pub fn load_diff_for_selection(&mut self) {
         match self.current_tab {
             Tab::Status => {
@@ -531,9 +599,9 @@ impl App {
         let area = f.area();
         let help_area = Rect {
             x: area.width.saturating_sub(50) / 2,
-            y: area.height.saturating_sub(19) / 2,
+            y: area.height.saturating_sub(20) / 2,
             width: 50.min(area.width),
-            height: 19.min(area.height),
+            height: 20.min(area.height),
         };
 
         let help_lines = vec![
@@ -562,6 +630,10 @@ impl App {
             Line::from(vec![
                 Span::styled("  PgUp/PgDn  ", self.theme.help_key()),
                 Span::styled("Page up / page down", self.theme.help_desc()),
+            ]),
+            Line::from(vec![
+                Span::styled("  Home/End   ", self.theme.help_key()),
+                Span::styled("Jump to first / last", self.theme.help_desc()),
             ]),
             Line::from(vec![
                 Span::styled("  d          ", self.theme.help_key()),
