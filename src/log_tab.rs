@@ -43,6 +43,7 @@ pub struct LogTab {
     pub total_commits: usize,
     commit_list_height: Cell<usize>,
     file_list_height: Cell<usize>,
+    scroll: Cell<usize>,
 }
 
 impl LogTab {
@@ -61,6 +62,7 @@ impl LogTab {
             total_commits: 0,
             commit_list_height: Cell::new(0),
             file_list_height: Cell::new(0),
+            scroll: Cell::new(0),
         }
     }
 
@@ -80,6 +82,7 @@ impl LogTab {
         self.files.clear();
         self.file_selected = 0;
         self.file_scroll = 0;
+        self.scroll.set(0);
         self.depth = LogDepth::Commits;
     }
 
@@ -225,18 +228,29 @@ impl LogTab {
     fn calc_scroll_top(&self) -> usize {
         let height = self.commit_list_height.get();
         if height == 0 || self.display_commits.is_empty() {
+            self.scroll.set(0);
             return 0;
         }
+        let max_scroll = self
+            .display_commits
+            .len()
+            .saturating_sub(height);
         let local_sel = self
             .selected
             .saturating_sub(self.display_offset)
             .min(self.display_commits.len().saturating_sub(1));
 
-        if local_sel >= height {
-            local_sel - height + 1
+        let current = self.scroll.get();
+        let new_scroll = if local_sel < current {
+            local_sel
+        } else if local_sel >= current + height {
+            local_sel.saturating_sub(height).saturating_add(1)
         } else {
-            0
-        }
+            current
+        };
+        let new_scroll = new_scroll.min(max_scroll);
+        self.scroll.set(new_scroll);
+        new_scroll
     }
 
     fn ensure_file_visible(&mut self) {
@@ -289,6 +303,7 @@ impl LogTab {
         match self.depth {
             LogDepth::Commits | LogDepth::Details => {
                 self.selected = 0;
+                self.scroll.set(0);
                 self.ensure_data(repo);
             }
             LogDepth::FilesDiff => {
@@ -304,6 +319,9 @@ impl LogTab {
             LogDepth::Commits | LogDepth::Details => {
                 self.selected = self.commit_ids.len().saturating_sub(1);
                 self.ensure_data(repo);
+                let height = self.commit_list_height.get().max(1);
+                let display_len = self.display_commits.len();
+                self.scroll.set(display_len.saturating_sub(height));
             }
             LogDepth::FilesDiff => {
                 self.file_selected = self.files.len().saturating_sub(1);
