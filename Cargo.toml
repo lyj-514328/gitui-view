@@ -1,6 +1,6 @@
 [package]
 name = "gitui-view"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 rust-version = "1.77"
 description = "A terminal-based Git repository browser with inline and side-by-side diff views"
