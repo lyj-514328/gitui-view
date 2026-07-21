@@ -40,6 +40,9 @@ pub struct LogTab {
     pub depth: LogDepth,
     pub tags_map: HashMap<String, Vec<String>>,
     pub branches_map: HashMap<String, Vec<(String, bool)>>,
+    /// 缓存上次 diff 的文件路径，避免重复 diff 同一个文件
+    pub cached_diff_path: Option<String>,
+    pub cached_diff_commit: Option<String>,
     pub total_commits: usize,
     commit_list_height: Cell<usize>,
     file_list_height: Cell<usize>,
@@ -59,6 +62,8 @@ impl LogTab {
             depth: LogDepth::Commits,
             tags_map: HashMap::new(),
             branches_map: HashMap::new(),
+            cached_diff_path: None,
+            cached_diff_commit: None,
             total_commits: 0,
             commit_list_height: Cell::new(0),
             file_list_height: Cell::new(0),
@@ -82,6 +87,8 @@ impl LogTab {
         self.files.clear();
         self.file_selected = 0;
         self.file_scroll = 0;
+        self.cached_diff_path = None;
+        self.cached_diff_commit = None;
         self.scroll.set(0);
         self.depth = LogDepth::Commits;
     }
@@ -139,19 +146,12 @@ impl LogTab {
 
     pub fn load_files(&mut self, repo: &GitRepo) {
         if let Some(commit_id) = self.current_commit_id() {
-            if let Ok(diffs) = repo.get_commit_diff(&commit_id) {
-                let mut files = Vec::new();
-                for diff in &diffs {
-                    let path = if !diff.new_path.is_empty() {
-                        diff.new_path.clone()
-                    } else {
-                        diff.old_path.clone()
-                    };
-                    files.push((path, diff.status.clone()));
-                }
+            if let Ok(files) = repo.get_commit_files(&commit_id) {
                 self.files = files;
                 self.file_selected = 0;
                 self.file_scroll = 0;
+                self.cached_diff_path = None;
+                self.cached_diff_commit = None;
             }
         }
     }
@@ -341,25 +341,26 @@ impl LogTab {
         self.files.get(self.file_selected).map(|(path, _)| path.clone())
     }
 
-    pub fn load_diff_for_file(&self, diff_view: &mut DiffView, repo: &GitRepo) {
+    pub fn load_diff_for_file(&mut self, diff_view: &mut DiffView, repo: &GitRepo) {
         if let Some(path) = self.current_file_path() {
             if let Some(commit_id) = self.current_commit_id() {
-                if let Ok(diffs) = repo.get_commit_diff(&commit_id) {
-                    for diff in diffs {
-                        let dp = if !diff.new_path.is_empty() {
-                            diff.new_path.clone()
-                        } else {
-                            diff.old_path.clone()
-                        };
-                        if dp == path {
-                            diff_view.set_diff(diff);
-                            return;
-                        }
-                    }
+                // 同一文件同一 commit 不重复 diff
+                if self.cached_diff_path.as_deref() == Some(&path)
+                    && self.cached_diff_commit.as_deref() == Some(&commit_id)
+                {
+                    return;
+                }
+                if let Ok(Some(diff)) = repo.get_commit_diff_for_file(&commit_id, &path) {
+                    self.cached_diff_path = Some(path);
+                    self.cached_diff_commit = Some(commit_id);
+                    diff_view.set_diff(diff);
+                    return;
                 }
             }
         }
         diff_view.clear();
+        self.cached_diff_path = None;
+        self.cached_diff_commit = None;
     }
 
     pub fn render(&self, f: &mut Frame, area: Rect, theme: &Theme) {
@@ -413,88 +414,91 @@ impl LogTab {
         f.render_widget(block, area);
         self.commit_list_height.set(inner.height as usize);
 
-        let mut lines: Vec<Line> = Vec::new();
+        let scroll_top = self.calc_scroll_top();
+        let height = inner.height as usize;
 
-        for (i, commit) in self.display_commits.iter().enumerate() {
-            let global_idx = self.display_offset + i;
-            let is_selected = global_idx == self.selected;
+        let visible_commits = self
+            .display_commits
+            .iter()
+            .enumerate()
+            .skip(scroll_top)
+            .take(height);
 
-            let dt = Local
-                .timestamp_opt(commit.time, 0)
-                .latest()
-                .map(|t| t.format("%Y-%m-%d").to_string())
-                .unwrap_or_default();
+        let lines: Vec<Line> = visible_commits
+            .map(|(i, commit)| {
+                let global_idx = self.display_offset + i;
+                let is_selected = global_idx == self.selected;
 
-            let hash_style = theme.commit_hash(is_selected);
-            let msg_style = theme.commit_msg(is_selected);
-            let date_style = if is_selected {
-                theme.selected()
-            } else {
-                Style::default().fg(theme.commit_date)
-            };
-            let author_style = if is_selected {
-                theme.selected()
-            } else {
-                Style::default().fg(theme.commit_author)
-            };
-            let tag_style = if is_selected {
-                theme.selected()
-            } else {
-                Style::default()
-                    .fg(Color::LightMagenta)
-                    .add_modifier(Modifier::BOLD)
-            };
-            let branch_style = if is_selected {
-                theme.selected()
-            } else {
-                Style::default().fg(Color::LightYellow)
-            };
+                let dt = Local
+                    .timestamp_opt(commit.time, 0)
+                    .latest()
+                    .map(|t| t.format("%Y-%m-%d").to_string())
+                    .unwrap_or_default();
 
-            let mut spans: Vec<Span> = vec![
-                Span::styled(format!(" {} ", commit.short_id), hash_style),
-                Span::styled(format!(" {} ", dt), date_style),
-                Span::styled(format!(" {} ", commit.author), author_style),
-            ];
+                let hash_style = theme.commit_hash(is_selected);
+                let msg_style = theme.commit_msg(is_selected);
+                let date_style = if is_selected {
+                    theme.selected()
+                } else {
+                    Style::default().fg(theme.commit_date)
+                };
+                let author_style = if is_selected {
+                    theme.selected()
+                } else {
+                    Style::default().fg(theme.commit_author)
+                };
+                let tag_style = if is_selected {
+                    theme.selected()
+                } else {
+                    Style::default()
+                        .fg(Color::LightMagenta)
+                        .add_modifier(Modifier::BOLD)
+                };
+                let branch_style = if is_selected {
+                    theme.selected()
+                } else {
+                    Style::default().fg(Color::LightYellow)
+                };
 
-            // tags
-            if let Some(tags) = self.tags_map.get(&commit.id) {
-                for tag in tags {
-                    spans.push(Span::styled(format!("<{}>", tag), tag_style));
-                }
-            }
+                let mut spans: Vec<Span> = vec![
+                    Span::styled(format!(" {} ", commit.short_id), hash_style),
+                    Span::styled(format!(" {} ", dt), date_style),
+                    Span::styled(format!(" {} ", commit.author), author_style),
+                ];
 
-            // branches
-            if let Some(branches) = self.branches_map.get(&commit.id) {
-                for (name, is_local) in branches {
-                    if *is_local {
-                        spans.push(Span::styled(format!("{{{}}}", name), branch_style));
-                    } else {
-                        spans.push(Span::styled(format!("[{}]", name), branch_style));
+                // tags
+                if let Some(tags) = self.tags_map.get(&commit.id) {
+                    for tag in tags {
+                        spans.push(Span::styled(format!("<{}>", tag), tag_style));
                     }
                 }
-            }
 
-            // message (extra spacing before message)
-            spans.push(Span::styled(format!("  {}", commit.summary), msg_style));
+                // branches
+                if let Some(branches) = self.branches_map.get(&commit.id) {
+                    for (name, is_local) in branches {
+                        if *is_local {
+                            spans.push(Span::styled(format!("{{{}}}", name), branch_style));
+                        } else {
+                            spans.push(Span::styled(format!("[{}]", name), branch_style));
+                        }
+                    }
+                }
 
-            lines.push(Line::from(spans));
-        }
+                // message
+                spans.push(Span::styled(format!("  {}", commit.summary), msg_style));
 
-        if lines.is_empty() {
-            lines.push(Line::from(Span::styled(
-                " (no commits)",
-                theme.dim_text(),
-            )));
-        }
-
-        let scroll_top = self.calc_scroll_top();
-        let visible: Vec<Line> = lines
-            .into_iter()
-            .skip(scroll_top)
-            .take(inner.height as usize)
+                Line::from(spans)
+            })
             .collect();
 
-        f.render_widget(Paragraph::new(visible), inner);
+        if lines.is_empty() && self.display_commits.is_empty() {
+            f.render_widget(
+                Paragraph::new(Line::from(Span::styled(" (no commits)", theme.dim_text()))),
+                inner,
+            );
+        } else {
+            f.render_widget(Paragraph::new(lines), inner);
+        }
     }
 
     fn render_commit_info(&self, f: &mut Frame, area: Rect, theme: &Theme) {
@@ -621,33 +625,34 @@ impl LogTab {
         f.render_widget(block, area);
         self.file_list_height.set(inner.height as usize);
 
-        let mut lines: Vec<Line> = Vec::new();
-
-        for (i, (path, status)) in self.files.iter().enumerate() {
-            let is_selected = i == self.file_selected && focused;
-            let marker = if is_selected { ">" } else { " " };
-            let sc = Self::status_char(status);
-            let style = Self::file_style(status, is_selected, theme);
-
-            lines.push(Line::from(Span::styled(
-                format!(" {} {} {}", marker, sc, path),
-                style,
-            )));
-        }
-
-        if lines.is_empty() {
-            lines.push(Line::from(Span::styled(
-                " (no files)",
-                theme.dim_text(),
-            )));
-        }
-
-        let visible: Vec<Line> = lines
-            .into_iter()
+        let height = inner.height as usize;
+        let visible_files = self
+            .files
+            .iter()
+            .enumerate()
             .skip(self.file_scroll)
-            .take(inner.height as usize)
+            .take(height);
+
+        let lines: Vec<Line> = visible_files
+            .map(|(i, (path, status))| {
+                let is_selected = i == self.file_selected && focused;
+                let marker = if is_selected { ">" } else { " " };
+                let sc = Self::status_char(status);
+                let style = Self::file_style(status, is_selected, theme);
+                Line::from(Span::styled(
+                    format!(" {} {} {}", marker, sc, path),
+                    style,
+                ))
+            })
             .collect();
 
-        f.render_widget(Paragraph::new(visible), inner);
+        if lines.is_empty() && self.files.is_empty() {
+            f.render_widget(
+                Paragraph::new(Line::from(Span::styled(" (no files)", theme.dim_text()))),
+                inner,
+            );
+        } else {
+            f.render_widget(Paragraph::new(lines), inner);
+        }
     }
 }

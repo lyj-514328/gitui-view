@@ -240,6 +240,77 @@ impl GitRepo {
         Self::diff_to_file_diffs(&diff)
     }
 
+    /// 轻量级获取 commit 的文件列表，不创建 FileDiff 结构体
+    pub fn get_commit_files(&self, commit_id: &str) -> Result<Vec<(String, StatusType)>> {
+        let oid = git2::Oid::from_str(commit_id)
+            .map_err(|_| anyhow::anyhow!("Invalid commit id: {}", commit_id))?;
+        let commit = self.repo.find_commit(oid)?;
+        let tree = commit.tree()?;
+
+        let parent_tree = if commit.parent_count() > 0 {
+            commit.parent(0)?.tree().ok()
+        } else {
+            None
+        };
+
+        let mut diff_opts = DiffOptions::new();
+        let diff = self
+            .repo
+            .diff_tree_to_tree(parent_tree.as_ref(), Some(&tree), Some(&mut diff_opts))?;
+
+        let files: Vec<(String, StatusType)> = diff
+            .deltas()
+            .map(|delta| {
+                let path = delta
+                    .new_file()
+                    .path()
+                    .or_else(|| delta.old_file().path())
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_default();
+
+                let status = match delta.status() {
+                    git2::Delta::Added => StatusType::Added,
+                    git2::Delta::Deleted => StatusType::Deleted,
+                    git2::Delta::Modified => StatusType::Modified,
+                    git2::Delta::Renamed => StatusType::Renamed,
+                    git2::Delta::Copied => StatusType::Copied,
+                    git2::Delta::Untracked => StatusType::Untracked,
+                    git2::Delta::Typechange => StatusType::TypeChange,
+                    _ => StatusType::Modified,
+                };
+
+                (path, status)
+            })
+            .collect();
+        Ok(files)
+    }
+
+    pub fn get_commit_diff_for_file(
+        &self,
+        commit_id: &str,
+        path: &str,
+    ) -> Result<Option<FileDiff>> {
+        let oid = git2::Oid::from_str(commit_id)
+            .map_err(|_| anyhow::anyhow!("Invalid commit id: {}", commit_id))?;
+        let commit = self.repo.find_commit(oid)?;
+        let tree = commit.tree()?;
+
+        let parent_tree = if commit.parent_count() > 0 {
+            commit.parent(0)?.tree().ok()
+        } else {
+            None
+        };
+
+        let mut diff_opts = DiffOptions::new();
+        diff_opts.pathspec(path);
+        let diff = self
+            .repo
+            .diff_tree_to_tree(parent_tree.as_ref(), Some(&tree), Some(&mut diff_opts))?;
+
+        let mut diffs = Self::diff_to_file_diffs(&diff)?;
+        Ok(diffs.pop())
+    }
+
     pub fn get_workdir_diff(&self, path: &str, staged: bool) -> Result<FileDiff> {
         let mut diff_opts = DiffOptions::new();
         diff_opts.pathspec(path);
