@@ -7,7 +7,7 @@ use crate::theme::Theme;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Tabs},
+    widgets::{Block, Borders, Clear, Paragraph, Tabs},
     Frame,
 };
 use std::path::Path;
@@ -28,7 +28,6 @@ pub struct App {
     pub diff_view: DiffView,
     pub theme: Theme,
     pub show_diff: bool,
-    pub diff_fullscreen: bool,
     pub show_help: bool,
     pub diff_mode: DiffViewMode,
 }
@@ -45,7 +44,6 @@ impl App {
             diff_view: DiffView::new(),
             theme,
             show_diff: false,
-            diff_fullscreen: false,
             show_help: false,
             diff_mode: DiffViewMode::SideBySide,
         };
@@ -134,10 +132,6 @@ impl App {
             || (self.current_tab == Tab::Status && self.status_tab.focus == StatusFocus::Diff)
             || (self.current_tab == Tab::Log && self.log_tab.depth >= log_tab::LogDepth::FilesDiff)
             || (self.current_tab == Tab::Stashes && self.stashes_tab.depth >= stashes_tab::StashDepth::FilesDiff)
-    }
-
-    pub fn toggle_diff_fullscreen(&mut self) {
-        self.diff_fullscreen = !self.diff_fullscreen;
     }
 
     pub fn toggle_diff_mode(&mut self) {
@@ -474,29 +468,18 @@ impl App {
         let content_area = main_layout[1];
 
         if self.current_tab == Tab::Status {
-            if self.status_tab.focus == StatusFocus::Diff && self.diff_fullscreen {
-                self.diff_view.render(f, content_area, &self.theme);
-            } else {
-                let split = Layout::default()
-                    .direction(Direction::Horizontal)
-                    .constraints([Constraint::Ratio(2, 5), Constraint::Ratio(3, 5)])
-                    .split(content_area);
+            let split = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Ratio(2, 5), Constraint::Ratio(3, 5)])
+                .split(content_area);
 
-                self.status_tab.render(f, split[0], &self.theme);
-                self.diff_view.render(f, split[1], &self.theme);
-            }
+            self.status_tab.render(f, split[0], &self.theme);
+            self.diff_view.render(f, split[1], &self.theme);
         } else if self.show_diff {
-            let split = if self.diff_fullscreen {
-                Layout::default()
-                    .direction(Direction::Horizontal)
-                    .constraints([Constraint::Length(0), Constraint::Min(1)])
-                    .split(content_area)
-            } else {
-                Layout::default()
-                    .direction(Direction::Horizontal)
-                    .constraints([Constraint::Ratio(2, 5), Constraint::Ratio(3, 5)])
-                    .split(content_area)
-            };
+            let split = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Ratio(2, 5), Constraint::Ratio(3, 5)])
+                .split(content_area);
 
             self.render_tab_content(f, split[0]);
             self.diff_view.render(f, split[1], &self.theme);
@@ -507,12 +490,11 @@ impl App {
         let mode_text = if self.current_tab == Tab::Status {
             if self.status_tab.focus == StatusFocus::Diff {
                 format!(
-                    " [{}]{} | q:quit | h:help | f:fullscreen | m:toggle mode({}) | \u{2191}\u{2193}:scroll ",
+                    " [{}] | q:quit | h:help | m:toggle mode({}) | \u{2191}\u{2193}:scroll ",
                     match self.diff_mode {
                         DiffViewMode::Inline => "inline",
                         DiffViewMode::SideBySide => "side-by-side",
                     },
-                    if self.diff_fullscreen { " [F]" } else { "" },
                     match self.diff_mode {
                         DiffViewMode::Inline => "inline",
                         DiffViewMode::SideBySide => "side-by-side",
@@ -523,12 +505,11 @@ impl App {
             }
         } else if self.is_any_diff_active() {
             format!(
-                " [{}]{} | q:quit | h:help | d:toggle diff | f:fullscreen | m:toggle mode({}) | \u{2191}\u{2193}:scroll ",
+                " [{}] | q:quit | h:help | d:toggle diff | m:toggle mode({}) | \u{2191}\u{2193}:scroll ",
                 match self.diff_mode {
                     DiffViewMode::Inline => "inline",
                     DiffViewMode::SideBySide => "side-by-side",
                 },
-                if self.diff_fullscreen { " [F]" } else { "" },
                 match self.diff_mode {
                     DiffViewMode::Inline => "inline",
                     DiffViewMode::SideBySide => "side-by-side",
@@ -652,6 +633,7 @@ impl App {
             .border_style(self.theme.border_focused_style())
             .style(self.theme.normal());
 
+        f.render_widget(Clear, help_area);
         f.render_widget(
             Paragraph::new(help_lines)
                 .block(help_block)

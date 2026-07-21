@@ -98,10 +98,8 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
                         app::Tab::Status => {
                             if app.status_tab.focus == StatusFocus::Diff {
                                 app.status_tab.focus = StatusFocus::Unstaged;
-                                app.diff_fullscreen = false;
                             } else if app.status_tab.current_file().is_some() {
                                 app.status_tab.focus = StatusFocus::Diff;
-                                app.diff_fullscreen = true;
                             }
                         }
                         app::Tab::Log => {
@@ -120,32 +118,22 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
                         }
                     }
                 }
-                KeyCode::Char('f') => {
-                    if app.current_tab == app::Tab::Status && app.status_tab.focus == StatusFocus::Diff {
-                        app.diff_fullscreen = !app.diff_fullscreen;
-                    } else {
-                        app.toggle_diff_fullscreen();
-                    }
-                }
                 KeyCode::Char('m') => {
                     app.toggle_diff_mode();
                 }
                 KeyCode::Char('1') => {
                     app.current_tab = app::Tab::Status;
                     app.show_diff = false;
-                    app.diff_fullscreen = false;
                     app.refresh_current_tab();
                 }
                 KeyCode::Char('2') => {
                     app.current_tab = app::Tab::Log;
                     app.show_diff = false;
-                    app.diff_fullscreen = false;
                     app.refresh_current_tab();
                 }
                 KeyCode::Char('3') => {
                     app.current_tab = app::Tab::Stashes;
                     app.show_diff = false;
-                    app.diff_fullscreen = false;
                     app.refresh_current_tab();
                 }
                 KeyCode::Up | KeyCode::Char('k') => {
@@ -175,9 +163,6 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
                 KeyCode::Right => {
                     if app.current_tab == app::Tab::Status {
                         app.status_tab.focus_right();
-                        if app.status_tab.focus == StatusFocus::Diff {
-                            app.diff_fullscreen = true;
-                        }
                     } else if app.current_tab == app::Tab::Log {
                         app.log_tab_enter();
                     } else if app.current_tab == app::Tab::Stashes {
@@ -188,7 +173,6 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
                     if app.current_tab == app::Tab::Status {
                         if app.status_tab.focus == StatusFocus::Diff {
                             app.status_tab.focus = StatusFocus::Unstaged;
-                            app.diff_fullscreen = false;
                         } else {
                             app.status_tab.focus_left();
                         }
@@ -201,7 +185,6 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
                         && app.status_tab.focus == StatusFocus::Diff
                     {
                         app.status_tab.focus = StatusFocus::Unstaged;
-                        app.diff_fullscreen = false;
                     } else if app.current_tab == app::Tab::Log
                         && app.log_tab.depth != log_tab::LogDepth::Commits
                     {
@@ -219,10 +202,8 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
                         app::Tab::Status => {
                             if app.status_tab.focus == StatusFocus::Diff {
                                 app.status_tab.focus = StatusFocus::Unstaged;
-                                app.diff_fullscreen = false;
                             } else if app.status_tab.current_file().is_some() {
                                 app.status_tab.focus = StatusFocus::Diff;
-                                app.diff_fullscreen = true;
                             }
                         }
                         app::Tab::Log => {
