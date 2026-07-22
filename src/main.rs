@@ -22,7 +22,7 @@ use anyhow::Result;
 use clap::Parser;
 use crossterm::{
     event::{
-        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind,
+        self, Event, KeyCode, KeyEventKind,
     },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -50,7 +50,7 @@ fn main() -> Result<()> {
 
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    execute!(stdout, EnterAlternateScreen)?;
 
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
@@ -62,7 +62,6 @@ fn main() -> Result<()> {
     execute!(
         terminal.backend_mut(),
         LeaveAlternateScreen,
-        DisableMouseCapture
     )?;
     terminal.show_cursor()?;
 
@@ -98,6 +97,7 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
                         app::Tab::Status => {
                             if app.status_tab.focus == StatusFocus::Diff {
                                 app.status_tab.focus = StatusFocus::Unstaged;
+                                app.show_diff = false;
                             } else if app.status_tab.current_file().is_some() {
                                 app.status_tab.focus = StatusFocus::Diff;
                             }
@@ -116,6 +116,11 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
                                 app.stash_tab_enter();
                             }
                         }
+                    }
+                }
+                KeyCode::Char('f') => {
+                    if app.is_any_diff_active() {
+                        app.toggle_full_file_mode();
                     }
                 }
                 KeyCode::Char('m') => {
@@ -162,7 +167,13 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
                 }
                 KeyCode::Right => {
                     if app.current_tab == app::Tab::Status {
-                        app.status_tab.focus_right();
+                        if app.status_tab.current_file().is_some() {
+                            app.status_tab.focus = StatusFocus::Diff;
+                            app.show_diff = true;
+                            app.load_diff_for_selection();
+                        } else {
+                            app.status_tab.focus_right();
+                        }
                     } else if app.current_tab == app::Tab::Log {
                         app.log_tab_enter();
                     } else if app.current_tab == app::Tab::Stashes {
@@ -173,6 +184,7 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
                     if app.current_tab == app::Tab::Status {
                         if app.status_tab.focus == StatusFocus::Diff {
                             app.status_tab.focus = StatusFocus::Unstaged;
+                            app.show_diff = false;
                         } else {
                             app.status_tab.focus_left();
                         }
@@ -185,6 +197,7 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
                         && app.status_tab.focus == StatusFocus::Diff
                     {
                         app.status_tab.focus = StatusFocus::Unstaged;
+                        app.show_diff = false;
                     } else if app.current_tab == app::Tab::Log
                         && app.log_tab.depth != log_tab::LogDepth::Commits
                     {

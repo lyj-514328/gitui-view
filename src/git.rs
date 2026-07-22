@@ -334,6 +334,30 @@ impl GitRepo {
         Ok(file_diffs.remove(0))
     }
 
+    pub fn get_commit_file_content(&self, commit_id: &str, path: &str) -> Result<String> {
+        let oid = git2::Oid::from_str(commit_id)
+            .map_err(|_| anyhow::anyhow!("Invalid commit id: {}", commit_id))?;
+        let commit = self.repo.find_commit(oid)?;
+        let tree = commit.tree()?;
+        let entry = tree.get_path(Path::new(path))?;
+        let obj = entry.to_object(&self.repo)?;
+        let blob = obj.into_blob()
+            .map_err(|_| anyhow::anyhow!("Entry is not a blob: {}", path))?;
+        let content = String::from_utf8(blob.content().to_vec())
+            .map_err(|_| anyhow::anyhow!("File is not valid UTF-8: {}", path))?;
+        Ok(content)
+    }
+
+    pub fn get_index_file_content(&self, path: &str) -> Result<String> {
+        let index = self.repo.index()?;
+        let entry = index.get_path(Path::new(path), 0)
+            .ok_or_else(|| anyhow::anyhow!("Path not found in index: {}", path))?;
+        let blob = self.repo.find_blob(entry.id)?;
+        let content = String::from_utf8(blob.content().to_vec())
+            .map_err(|_| anyhow::anyhow!("File is not valid UTF-8: {}", path))?;
+        Ok(content)
+    }
+
     pub fn get_stashes(&mut self) -> Result<Vec<StashInfo>> {
         let mut stashes = Vec::new();
         self.repo.stash_foreach(|index, message, oid| {

@@ -37,6 +37,7 @@ gitui-view is a lite version of [gitui](https://github.com/gitui-org/gitui), dra
 | `Esc` | Return to previous level |
 | `←` | Status tab: switch between staged/unstaged panel |
 | `d` | Enter / exit diff view (context-dependent) |
+| `f` | Toggle full file / diff only view |
 | `m` | Toggle inline / side-by-side diff mode |
 | `PageUp` / `PageDown` | Scroll diff by page |
 | `Home` / `End` | Go to diff top / bottom |

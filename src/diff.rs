@@ -27,6 +27,8 @@ pub struct DiffView {
     pub selected_line: usize,
     pub mode: DiffViewMode,
     pub focused: Cell<bool>,
+    pub show_full_file: bool,
+    pub full_file_content: Option<String>,
     visible_height: Cell<usize>,
     total_rendered_lines: Cell<usize>,
     last_scroll_time: RefCell<Instant>,
@@ -41,6 +43,8 @@ impl DiffView {
             selected_line: 0,
             mode: DiffViewMode::SideBySide,
             focused: Cell::new(false),
+            show_full_file: false,
+            full_file_content: None,
             visible_height: Cell::new(0),
             total_rendered_lines: Cell::new(0),
             last_scroll_time: RefCell::new(Instant::now()),
@@ -58,6 +62,21 @@ impl DiffView {
         self.file_diff = None;
         self.scroll = 0;
         self.selected_line = 0;
+        self.show_full_file = false;
+        self.full_file_content = None;
+    }
+
+    pub fn toggle_full_file(&mut self) {
+        self.show_full_file = !self.show_full_file;
+    }
+
+    pub fn set_full_file_content(&mut self, content: String) {
+        self.full_file_content = Some(content);
+    }
+
+    pub fn clear_full_file_content(&mut self) {
+        self.full_file_content = None;
+        self.show_full_file = false;
     }
 
     fn update_scroll_speed(&self) {
@@ -163,9 +182,16 @@ impl DiffView {
             return;
         }
 
-        match self.mode {
-            DiffViewMode::Inline => self.render_inline(f, inner_area, theme),
-            DiffViewMode::SideBySide => self.render_side_by_side(f, inner_area, theme),
+        if self.show_full_file && self.full_file_content.is_some() {
+            match self.mode {
+                DiffViewMode::Inline => self.render_inline_full_file(f, inner_area, theme),
+                DiffViewMode::SideBySide => self.render_side_by_side_full_file(f, inner_area, theme),
+            }
+        } else {
+            match self.mode {
+                DiffViewMode::Inline => self.render_inline(f, inner_area, theme),
+                DiffViewMode::SideBySide => self.render_side_by_side(f, inner_area, theme),
+            }
         }
     }
 
@@ -312,6 +338,200 @@ impl DiffView {
             .collect();
         let visible_right: Vec<Line> = right_lines
             .into_iter()
+            .skip(self.scroll)
+            .take(area.height as usize)
+            .collect();
+
+        f.render_widget(Paragraph::new(visible_left), left_area);
+        f.render_widget(Paragraph::new(visible_right), right_area);
+    }
+
+    fn render_inline_full_file(&self, f: &mut Frame, area: Rect, theme: &Theme) {
+        let Some(file_diff) = &self.file_diff else { return };
+        let Some(content) = &self.full_file_content else { return };
+
+        let extension = Path::new(&file_diff.new_path)
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("");
+        let file_name = Path::new(&file_diff.new_path)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("");
+
+        let full_lines: Vec<&str> = content.lines().collect();
+        let mut rendered_lines: Vec<Line<'static>> = Vec::new();
+
+        let hunk_ranges = build_hunk_ranges(file_diff);
+        let mut hunk_idx = 0;
+        let mut new_line_no: u32 = 1;
+        let mut line_pos: usize = 0;
+
+        while line_pos < full_lines.len() {
+            if hunk_idx < hunk_ranges.len() && new_line_no == hunk_ranges[hunk_idx].new_start {
+                let range = &hunk_ranges[hunk_idx];
+                let hunk = &file_diff.hunks[range.hunk_idx];
+
+                rendered_lines.push(Line::from(Span::styled(String::new(), Style::default())));
+                let header_text = hunk.header.trim();
+                rendered_lines.push(Line::from(Span::styled(header_text.to_string(), theme.diff_header())));
+
+                let mut minus_buffer: Vec<&DiffLine> = Vec::new();
+                let mut plus_buffer: Vec<&DiffLine> = Vec::new();
+                let mut line_idx = 0;
+
+                for diff_line in &hunk.lines {
+                    match diff_line.line_type {
+                        DiffLineType::Context | DiffLineType::Header => {
+                            flush_buffer_inline(&mut rendered_lines, &mut line_idx, &mut minus_buffer, &mut plus_buffer, file_name, extension, theme, area.width);
+
+                            let content_spans = DiffEngine::highlight_line(
+                                &diff_line.content,
+                                diff_line.line_type.clone(),
+                                file_name,
+                                extension,
+                                theme,
+                            );
+                            let prefix_spans = build_dual_prefix_spans(
+                                diff_line.old_lineno,
+                                diff_line.new_lineno,
+                                theme.line_number_style(),
+                                theme.line_number_style(),
+                                theme.line_number_column_style(),
+                            );
+                            wrap_and_push(&mut rendered_lines, &prefix_spans, &content_spans, area.width as usize, theme.line_number_column_style());
+                            line_idx += 1;
+                        }
+                        DiffLineType::Delete => minus_buffer.push(diff_line),
+                        DiffLineType::Add => plus_buffer.push(diff_line),
+                    }
+                }
+
+                flush_buffer_inline(&mut rendered_lines, &mut line_idx, &mut minus_buffer, &mut plus_buffer, file_name, extension, theme, area.width);
+
+                new_line_no += range.new_count;
+                line_pos += range.new_count as usize;
+                hunk_idx += 1;
+            } else {
+                let line_content = full_lines[line_pos];
+                let prefix_spans = build_dual_prefix_spans(
+                    None,
+                    Some(new_line_no),
+                    theme.line_number_style(),
+                    theme.line_number_style(),
+                    theme.line_number_column_style(),
+                );
+                let content_spans = DiffEngine::highlight_line(
+                    line_content,
+                    DiffLineType::Context,
+                    file_name,
+                    extension,
+                    theme,
+                );
+                wrap_and_push(&mut rendered_lines, &prefix_spans, &content_spans, area.width as usize, theme.line_number_column_style());
+                new_line_no += 1;
+                line_pos += 1;
+            }
+        }
+
+        let total = rendered_lines.len();
+        self.total_rendered_lines.set(total);
+
+        let visible_lines: Vec<Line> = rendered_lines
+            .into_iter()
+            .skip(self.scroll)
+            .take(area.height as usize)
+            .collect();
+
+        let para = Paragraph::new(visible_lines);
+        f.render_widget(para, area);
+    }
+
+    fn render_side_by_side_full_file(&self, f: &mut Frame, area: Rect, theme: &Theme) {
+        let Some(file_diff) = &self.file_diff else { return };
+        let Some(content) = &self.full_file_content else { return };
+
+        if area.width < 8 {
+            return;
+        }
+
+        let half_width = area.width.saturating_sub(1) / 2;
+        let left_area = Rect {
+            x: area.x,
+            y: area.y,
+            width: half_width,
+            height: area.height,
+        };
+        let right_area = Rect {
+            x: area.x + half_width + 1,
+            y: area.y,
+            width: area.width.saturating_sub(half_width + 1),
+            height: area.height,
+        };
+
+        let extension = Path::new(&file_diff.new_path)
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("");
+        let file_name = Path::new(&file_diff.new_path)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("");
+
+        let new_lines: Vec<&str> = content.lines().collect();
+        let hunk_ranges = build_hunk_ranges(file_diff);
+
+        let mut left_rendered: Vec<Line<'static>> = Vec::new();
+        let mut right_rendered: Vec<Line<'static>> = Vec::new();
+        let column_style = theme.line_number_column_style();
+
+        let mut hunk_idx = 0;
+
+        for (i, new_line_content) in new_lines.iter().enumerate() {
+            let new_lineno = (i + 1) as u32;
+
+            if hunk_idx < hunk_ranges.len() && new_lineno == hunk_ranges[hunk_idx].new_start {
+                let range = &hunk_ranges[hunk_idx];
+                let hunk = &file_diff.hunks[range.hunk_idx];
+
+                left_rendered.push(Line::from(Span::styled(String::new(), Style::default())));
+                right_rendered.push(Line::from(Span::styled(String::new(), Style::default())));
+                let header_text = hunk.header.trim();
+                left_rendered.push(Line::from(Span::styled(header_text.to_string(), theme.diff_header())));
+                let underline = "─".repeat(left_area.width.saturating_sub(1) as usize);
+                left_rendered.push(Line::from(Span::styled(underline, theme.diff_header())));
+                right_rendered.push(Line::from(Span::styled(String::new(), theme.dim_text())));
+                right_rendered.push(Line::from(Span::styled(String::new(), theme.dim_text())));
+
+                let (paired_left, paired_right) = self.pair_lines(hunk, file_name, extension, theme, left_area.width, right_area.width);
+                left_rendered.extend(paired_left);
+                right_rendered.extend(paired_right);
+
+                hunk_idx += 1;
+                continue;
+            }
+
+            if hunk_idx < hunk_ranges.len() && new_lineno >= hunk_ranges[hunk_idx].new_start {
+                if new_lineno < hunk_ranges[hunk_idx].new_start + hunk_ranges[hunk_idx].new_count {
+                    continue;
+                }
+            }
+
+            let left_spans = DiffEngine::highlight_line(new_line_content, DiffLineType::Context, file_name, extension, theme);
+            let left_prefix = build_prefix_spans('│', new_lineno, theme.line_number_style(), column_style);
+            let right_spans = DiffEngine::highlight_line(new_line_content, DiffLineType::Context, file_name, extension, theme);
+            let right_prefix = build_prefix_spans('│', new_lineno, theme.line_number_style(), column_style);
+            wrap_and_push_pair(&mut left_rendered, &mut right_rendered, &left_prefix, &right_prefix, &left_spans, &right_spans, left_area.width as usize, right_area.width as usize, column_style);
+        }
+
+        let total = cmp::max(left_rendered.len(), right_rendered.len());
+        self.total_rendered_lines.set(total);
+
+        let visible_left: Vec<Line> = left_rendered.into_iter()
+            .skip(self.scroll)
+            .take(area.height as usize)
+            .collect();
+        let visible_right: Vec<Line> = right_rendered.into_iter()
             .skip(self.scroll)
             .take(area.height as usize)
             .collect();
@@ -756,6 +976,47 @@ fn chunk_spans(spans: &[Span<'static>], content_width: usize) -> Vec<Vec<Span<'s
     }
 
     chunks
+}
+
+struct HunkRange {
+    new_start: u32,
+    new_count: u32,
+    hunk_idx: usize,
+}
+
+fn parse_hunk_header(header: &str) -> (u32, u32, u32, u32) {
+    let parts: Vec<&str> = header.split_whitespace().collect();
+    if parts.len() < 3 {
+        return (0, 0, 0, 0);
+    }
+    let old_part = parts[1].trim_start_matches('-');
+    let new_part = parts[2].trim_start_matches('+');
+
+    let old_parts: Vec<&str> = old_part.split(',').collect();
+    let new_parts: Vec<&str> = new_part.split(',').collect();
+
+    let old_start: u32 = old_parts[0].parse().unwrap_or(0);
+    let old_count: u32 = old_parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(1);
+    let new_start: u32 = new_parts[0].parse().unwrap_or(0);
+    let new_count: u32 = new_parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(1);
+
+    (old_start, old_count, new_start, new_count)
+}
+
+fn build_hunk_ranges(file_diff: &FileDiff) -> Vec<HunkRange> {
+    file_diff
+        .hunks
+        .iter()
+        .enumerate()
+        .map(|(i, hunk)| {
+            let (_old_start, _old_count, new_start, new_count) = parse_hunk_header(&hunk.header);
+            HunkRange {
+                new_start,
+                new_count,
+                hunk_idx: i,
+            }
+        })
+        .collect()
 }
 
 fn format_bytes(old_bytes: u64, new_bytes: u64) -> (String, String) {

@@ -356,6 +356,68 @@ impl App {
         }
     }
 
+    pub fn toggle_full_file_mode(&mut self) {
+        self.diff_view.toggle_full_file();
+        if self.diff_view.show_full_file && self.diff_view.full_file_content.is_none() {
+            self.load_full_file_content();
+        }
+    }
+
+    fn load_full_file_content(&mut self) {
+        match self.current_tab {
+            Tab::Status => {
+                if let Some(path) = self.status_tab.current_file() {
+                    let staged = self.status_tab.current_staged();
+                    if staged {
+                        if let Ok(content) = self.repo.get_index_file_content(&path) {
+                            self.diff_view.set_full_file_content(content);
+                            return;
+                        }
+                    } else {
+                        if let Some(wd) = self.repo.workdir() {
+                            let full_path = wd.join(&path);
+                            if let Ok(content) = std::fs::read_to_string(&full_path) {
+                                self.diff_view.set_full_file_content(content);
+                                return;
+                            }
+                        }
+                    }
+                }
+                self.diff_view.clear_full_file_content();
+            }
+            Tab::Log => {
+                if self.log_tab.display_commits.is_empty() {
+                    self.diff_view.clear_full_file_content();
+                    return;
+                }
+                let idx = self.log_tab.selected.min(self.log_tab.display_commits.len().saturating_sub(1));
+                let commit_id = &self.log_tab.display_commits[idx].id;
+                if let Some(path) = self.log_tab.current_file_path() {
+                    if let Ok(content) = self.repo.get_commit_file_content(commit_id, &path) {
+                        self.diff_view.set_full_file_content(content);
+                        return;
+                    }
+                }
+                self.diff_view.clear_full_file_content();
+            }
+            Tab::Stashes => {
+                if self.stashes_tab.stashes.is_empty() {
+                    self.diff_view.clear_full_file_content();
+                    return;
+                }
+                let idx = self.stashes_tab.selected.min(self.stashes_tab.stashes.len().saturating_sub(1));
+                let commit_id = &self.stashes_tab.stashes[idx].commit_id;
+                if let Some(path) = self.stashes_tab.current_file_path() {
+                    if let Ok(content) = self.repo.get_commit_file_content(commit_id, &path) {
+                        self.diff_view.set_full_file_content(content);
+                        return;
+                    }
+                }
+                self.diff_view.clear_full_file_content();
+            }
+        }
+    }
+
     pub fn load_diff_for_selection(&mut self) {
         match self.current_tab {
             Tab::Status => {
@@ -363,6 +425,7 @@ impl App {
                     let staged = self.status_tab.current_staged();
                     if let Ok(diff) = self.repo.get_workdir_diff(&path, staged) {
                         self.diff_view.set_diff(diff);
+                        self.load_full_file_content();
                         return;
                     }
                 }
@@ -373,6 +436,7 @@ impl App {
             }
             Tab::Stashes => {
                 self.stashes_tab.load_diff_for_file(&mut self.diff_view, &mut self.repo);
+                self.load_full_file_content();
             }
         }
     }
@@ -467,7 +531,7 @@ impl App {
 
         let content_area = main_layout[1];
 
-        if self.current_tab == Tab::Status {
+        if self.current_tab == Tab::Status && !self.show_diff {
             let split = Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints([Constraint::Ratio(2, 5), Constraint::Ratio(3, 5)])
@@ -475,6 +539,8 @@ impl App {
 
             self.status_tab.render(f, split[0], &self.theme);
             self.diff_view.render(f, split[1], &self.theme);
+        } else if self.current_tab == Tab::Status {
+            self.diff_view.render(f, content_area, &self.theme);
         } else if self.show_diff {
             let split = Layout::default()
                 .direction(Direction::Horizontal)
@@ -487,36 +553,28 @@ impl App {
             self.render_tab_content(f, content_area);
         }
 
+        let diff_mode_label = match self.diff_mode {
+            DiffViewMode::Inline => "inline",
+            DiffViewMode::SideBySide => "side-by-side",
+        };
+        let full_file_label = if self.diff_view.show_full_file { " full-file" } else { "" };
+
         let mode_text = if self.current_tab == Tab::Status {
             if self.status_tab.focus == StatusFocus::Diff {
                 format!(
-                    " [{}] | q:quit | h:help | m:toggle mode({}) | \u{2191}\u{2193}:scroll ",
-                    match self.diff_mode {
-                        DiffViewMode::Inline => "inline",
-                        DiffViewMode::SideBySide => "side-by-side",
-                    },
-                    match self.diff_mode {
-                        DiffViewMode::Inline => "inline",
-                        DiffViewMode::SideBySide => "side-by-side",
-                    },
+                    " [{}{}] | q:quit | h:help | f:toggle full file | m:toggle mode({}) | \u{2191}\u{2193}:scroll ",
+                    diff_mode_label, full_file_label, diff_mode_label,
                 )
             } else {
                 " q:quit | h:help | \u{2191}\u{2193}:navigate | PgUp/PgDn:page | \u{2190}\u{2192}:switch panel | Enter:open diff | 1-3:goto tab ".to_string()
             }
         } else if self.is_any_diff_active() {
             format!(
-                " [{}] | q:quit | h:help | d:toggle diff | m:toggle mode({}) | \u{2191}\u{2193}:scroll ",
-                match self.diff_mode {
-                    DiffViewMode::Inline => "inline",
-                    DiffViewMode::SideBySide => "side-by-side",
-                },
-                match self.diff_mode {
-                    DiffViewMode::Inline => "inline",
-                    DiffViewMode::SideBySide => "side-by-side",
-                },
+                " [{}{}] | q:quit | h:help | d:toggle diff | f:toggle full file | m:toggle mode({}) | \u{2191}\u{2193}:scroll ",
+                diff_mode_label, full_file_label, diff_mode_label,
             )
         } else {
-            " q:quit | h:help | d:show diff | ↑↓:navigate | PgUp/PgDn:page | Tab:next | 1-3:goto tab ".to_string()
+            " q:quit | h:help | d:show diff | \u{2191}\u{2193}:navigate | PgUp/PgDn:page | Tab:next | 1-3:goto tab ".to_string()
         };
 
         let status_line = Line::from(Span::styled(mode_text, self.theme.dim_text()));
@@ -619,6 +677,10 @@ impl App {
             Line::from(vec![
                 Span::styled("  d          ", self.theme.help_key()),
                 Span::styled("Toggle diff view", self.theme.help_desc()),
+            ]),
+            Line::from(vec![
+                Span::styled("  f          ", self.theme.help_key()),
+                Span::styled("Toggle full file / diff only", self.theme.help_desc()),
             ]),
             Line::from(vec![
                 Span::styled("  m          ", self.theme.help_key()),
