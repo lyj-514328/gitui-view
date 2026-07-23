@@ -3,7 +3,7 @@ use crate::git::{DiffLine, DiffLineType, FileDiff, Hunk};
 use crate::theme::Theme;
 use ratatui::{
     layout::Rect,
-    style::Style,
+    style::{Color, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
     Frame,
@@ -720,7 +720,8 @@ fn flush_buffer_sbs(
             );
             let left_prefix_spans = build_prefix_spans('│', line.old_lineno.unwrap_or(0), theme.line_number_minus_style(), column_style);
             let right_prefix_spans = vec![Span::styled(empty_prefix.to_string(), column_style)];
-            wrap_and_push_pair(left, right, &left_prefix_spans, &right_prefix_spans, &spans, &[], left_width as usize, right_width as usize, column_style);
+            let indicator = build_empty_indicator(right_width as usize - right_prefix_spans.iter().map(|s| UnicodeWidthStr::width(s.content.as_ref())).sum::<usize>(), theme);
+            wrap_and_push_pair(left, right, &left_prefix_spans, &right_prefix_spans, &spans, &indicator, left_width as usize, right_width as usize, column_style);
         } else {
             let line = adds[i];
             let spans = DiffEngine::highlight_line(
@@ -732,11 +733,30 @@ fn flush_buffer_sbs(
             );
             let left_prefix_spans = vec![Span::styled(empty_prefix.to_string(), column_style)];
             let right_prefix_spans = build_prefix_spans('│', line.new_lineno.unwrap_or(0), theme.line_number_plus_style(), column_style);
-            wrap_and_push_pair(left, right, &left_prefix_spans, &right_prefix_spans, &[], &spans, left_width as usize, right_width as usize, column_style);
+            let indicator = build_empty_indicator(left_width as usize - left_prefix_spans.iter().map(|s| UnicodeWidthStr::width(s.content.as_ref())).sum::<usize>(), theme);
+            wrap_and_push_pair(left, right, &left_prefix_spans, &right_prefix_spans, &indicator, &spans, left_width as usize, right_width as usize, column_style);
         }
     }
     dels.clear();
     adds.clear();
+}
+
+fn build_empty_indicator(content_width: usize, theme: &Theme) -> Vec<Span<'static>> {
+    if content_width == 0 {
+        return Vec::new();
+    }
+    let indicator_bg = if theme.diff_add_bg != Color::Reset {
+        Color::Rgb(0x20, 0x20, 0x20)
+    } else {
+        Color::Rgb(0xe0, 0xe0, 0xe0)
+    };
+    let mut s = String::with_capacity(content_width);
+    let pattern = "//";
+    while s.len() < content_width {
+        s.push_str(pattern);
+    }
+    s.truncate(content_width);
+    vec![Span::styled(s, Style::default().fg(theme.dim_text).bg(indicator_bg))]
 }
 
 fn build_prefix_spans(sign: char, lineno: u32, number_style: Style, column_style: Style) -> Vec<Span<'static>> {
@@ -774,6 +794,19 @@ fn build_dual_prefix_spans(
     spans
 }
 
+fn fill_rest_of_line(line_buf: &mut Vec<Span<'static>>, max_width: usize, fill_bg: Option<ratatui::style::Color>) {
+    let line_width: usize = line_buf.iter().map(|s| UnicodeWidthStr::width(s.content.as_ref())).sum();
+    if line_width < max_width {
+        if let Some(bg) = fill_bg {
+            let fill_len = max_width - line_width;
+            line_buf.push(Span::styled(
+                " ".repeat(fill_len),
+                Style::default().bg(bg),
+            ));
+        }
+    }
+}
+
 fn wrap_and_push(
     lines: &mut Vec<Line<'static>>,
     prefix_spans: &[Span<'static>],
@@ -783,9 +816,12 @@ fn wrap_and_push(
 ) {
     let prefix_width: usize = prefix_spans.iter().map(|s| UnicodeWidthStr::width(s.content.as_ref())).sum();
     let content_width = max_width.saturating_sub(prefix_width);
+    let fill_bg = content_spans.iter().find_map(|s| s.style.bg);
+
     if content_width == 0 {
         let mut line_buf = Vec::new();
         line_buf.extend(prefix_spans.iter().cloned());
+        fill_rest_of_line(&mut line_buf, max_width, fill_bg);
         lines.push(Line::from(line_buf));
         return;
     }
@@ -818,6 +854,7 @@ fn wrap_and_push(
                 }
                 line_buf.push(Span::styled(truncated, span.style));
             }
+            fill_rest_of_line(&mut line_buf, max_width, fill_bg);
             lines.push(Line::from(line_buf));
 
             line_buf = Vec::new();
@@ -836,6 +873,7 @@ fn wrap_and_push(
     }
 
     if !line_buf.is_empty() {
+        fill_rest_of_line(&mut line_buf, max_width, fill_bg);
         lines.push(Line::from(line_buf));
     }
 }
@@ -855,13 +893,17 @@ fn wrap_and_push_pair(
     let right_prefix_width: usize = right_prefix_spans.iter().map(|s| UnicodeWidthStr::width(s.content.as_ref())).sum();
     let left_content_width = left_max_width.saturating_sub(left_prefix_width);
     let right_content_width = right_max_width.saturating_sub(right_prefix_width);
+    let left_fill_bg = left_spans.iter().find_map(|s| s.style.bg);
+    let right_fill_bg = right_spans.iter().find_map(|s| s.style.bg);
 
     if left_content_width == 0 && right_content_width == 0 {
         let mut lspans = Vec::new();
         lspans.extend(left_prefix_spans.iter().cloned());
+        fill_rest_of_line(&mut lspans, left_max_width, left_fill_bg);
         left.push(Line::from(lspans));
         let mut rspans = Vec::new();
         rspans.extend(right_prefix_spans.iter().cloned());
+        fill_rest_of_line(&mut rspans, right_max_width, right_fill_bg);
         right.push(Line::from(rspans));
         return;
     }
@@ -886,6 +928,8 @@ fn wrap_and_push_pair(
         if i < left_chunks.len() {
             lspans.extend(left_chunks[i].clone());
         }
+        fill_rest_of_line(&mut lspans, left_max_width, left_fill_bg);
+        left.push(Line::from(lspans));
 
         let mut rspans = Vec::new();
         if let Some(p) = rprefix {
@@ -896,8 +940,7 @@ fn wrap_and_push_pair(
         if i < right_chunks.len() {
             rspans.extend(right_chunks[i].clone());
         }
-
-        left.push(Line::from(lspans));
+        fill_rest_of_line(&mut rspans, right_max_width, right_fill_bg);
         right.push(Line::from(rspans));
     }
 }
