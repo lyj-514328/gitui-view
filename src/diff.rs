@@ -854,14 +854,13 @@ fn wrap_and_push(
                 let mut w = 0;
                 for c in s.chars() {
                     let cw = UnicodeWidthStr::width(c.to_string().as_str());
-                    if w + cw + 1 > available && chars_consumed > 0 {
+                    if w + cw > available && chars_consumed > 0 {
                         break;
                     }
                     truncated.push(c);
                     w += cw;
                     chars_consumed += 1;
                 }
-                truncated.push('↴');
                 line_buf.push(Span::styled(truncated, span.style));
             }
             fill_rest_of_line(&mut line_buf, max_width, fill_bg);
@@ -993,14 +992,13 @@ fn chunk_spans(spans: &[Span<'static>], content_width: usize) -> Vec<Vec<Span<'s
                 let mut chars_consumed: usize = 0;
                 for c in remaining.chars() {
                     let cw = UnicodeWidthStr::width(c.to_string().as_str());
-                    if w + cw + 1 > available && chars_consumed > 0 {
+                    if w + cw > available && chars_consumed > 0 {
                         break;
                     }
                     truncated.push(c);
                     w += cw;
                     chars_consumed += 1;
                 }
-                truncated.push('↴');
                 current_chunk.push(Span::styled(truncated, span.style));
                 chunks.push(current_chunk);
                 current_chunk = Vec::new();
